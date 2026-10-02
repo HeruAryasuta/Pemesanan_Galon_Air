@@ -31,7 +31,7 @@ class AddressController extends Controller
 
             return back()->with('success', 'Alamat berhasil ditambahkan.');
         } catch (\Throwable $e) {
-            Log::error('Gagal tambah alamat: ' . $e->getMessage());
+            Log::error('Gagal tambah alamat: '.$e->getMessage());
 
             return back()->withInput()->with('error', 'Gagal menyimpan alamat.');
         }
@@ -52,7 +52,7 @@ class AddressController extends Controller
 
             return back()->with('success', 'Alamat berhasil diperbarui.');
         } catch (\Throwable $e) {
-            Log::error('Gagal update alamat #' . $address->id . ': ' . $e->getMessage());
+            Log::error('Gagal update alamat #'.$address->id.': '.$e->getMessage());
 
             return back()->withInput()->with('error', 'Gagal memperbarui alamat.');
         }
@@ -71,7 +71,7 @@ class AddressController extends Controller
 
             return back()->with('success', 'Alamat berhasil dihapus.');
         } catch (\Throwable $e) {
-            Log::error('Gagal hapus alamat #' . $address->id . ': ' . $e->getMessage());
+            Log::error('Gagal hapus alamat #'.$address->id.': '.$e->getMessage());
 
             return back()->with('error', 'Gagal menghapus alamat.');
         }
@@ -82,8 +82,8 @@ class AddressController extends Controller
         return $request->validate([
             'label' => ['nullable', 'string', 'max:100'],
             'full_address' => ['required', 'string', 'max:1000'],
-            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
-            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
+            'latitude' => ['nullable', 'required_with:longitude', 'numeric', 'between:-90,90'],
+            'longitude' => ['nullable', 'required_with:latitude', 'numeric', 'between:-180,180'],
             'is_primary' => ['boolean'],
         ]);
     }

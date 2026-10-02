@@ -14,6 +14,15 @@ class RouteStop extends Model
         'distance_from_previous_meters',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'visit_order' => 'integer',
+            'eta' => 'datetime',
+            'distance_from_previous_meters' => 'integer',
+        ];
+    }
+
     public function route()
     {
         return $this->belongsTo(Route::class);

@@ -13,6 +13,13 @@ class Delivery extends Model
         'delivered_at',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'delivered_at' => 'datetime',
+        ];
+    }
+
     public function order()
     {
         return $this->belongsTo(Order::class);

@@ -14,6 +14,15 @@ class Route extends Model
         'total_duration_seconds',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'route_date' => 'date',
+            'total_distance_meters' => 'integer',
+            'total_duration_seconds' => 'integer',
+        ];
+    }
+
     public function courier()
     {
         return $this->belongsTo(Courier::class);

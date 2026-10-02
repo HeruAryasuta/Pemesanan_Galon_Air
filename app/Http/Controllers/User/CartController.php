@@ -14,7 +14,7 @@ class CartController extends Controller
     public function index(): View
     {
         $cart = session('cart', []);
-        $products = Product::whereIn('id', array_keys($cart))->get()->keyBy('id');
+        $products = Product::with('category')->whereIn('id', array_keys($cart))->get()->keyBy('id');
 
         return view('user.cart.index', compact('cart', 'products'));
     }
@@ -34,7 +34,13 @@ class CartController extends Controller
             }
 
             $cart = session('cart', []);
-            $cart[$product->id] = ($cart[$product->id] ?? 0) + $validated['quantity'];
+            $newQuantity = ($cart[$product->id] ?? 0) + $validated['quantity'];
+
+            if ($product->stock < $newQuantity) {
+                return back()->with('error', 'Jumlah produk melebihi stok yang tersedia.');
+            }
+
+            $cart[$product->id] = $newQuantity;
             session(['cart' => $cart]);
 
             return back()->with('success', 'Produk berhasil ditambahkan ke keranjang.');
@@ -55,6 +61,12 @@ class CartController extends Controller
 
         if (! isset($cart[$productId])) {
             return back()->with('error', 'Item tidak ditemukan di keranjang.');
+        }
+
+        $product = Product::find($productId);
+
+        if (! $product || $product->stock < $validated['quantity']) {
+            return back()->with('error', 'Jumlah produk melebihi stok yang tersedia.');
         }
 
         $cart[$productId] = $validated['quantity'];

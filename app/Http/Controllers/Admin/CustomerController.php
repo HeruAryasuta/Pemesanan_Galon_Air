@@ -14,7 +14,16 @@ class CustomerController extends Controller
         $customers = User::query()
             ->where('role', 'customer')
             ->withCount('orders')
-            ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%' . $request->string('search') . '%'))
+            ->when($request->filled('search'), function ($query) use ($request): void {
+                $search = '%' . $request->string('search') . '%';
+
+                $query->where(function ($customerQuery) use ($search): void {
+                    $customerQuery
+                        ->where('name', 'like', $search)
+                        ->orWhere('email', 'like', $search)
+                        ->orWhere('phone', 'like', $search);
+                });
+            })
             ->latest()
             ->paginate(15);
 
@@ -25,7 +34,10 @@ class CustomerController extends Controller
     {
         abort_if($customer->role !== 'customer', 404);
 
-        $customer->load(['addresses', 'orders' => fn ($q) => $q->latest()->take(10)]);
+        $customer->loadCount('orders')->load([
+            'addresses' => fn ($query) => $query->orderByDesc('is_primary')->latest(),
+            'orders' => fn ($query) => $query->with('address')->latest()->take(10),
+        ]);
 
         return view('admin.customers.show', compact('customer'));
     }

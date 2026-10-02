@@ -59,8 +59,18 @@ class User extends Authenticatable
         return $this->hasMany(Order::class);
     }
 
+    public function courier()
+    {
+        return $this->hasOne(Courier::class);
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
+    }
+
+    public function isCourier(): bool
+    {
+        return $this->role === 'courier' && $this->courier()->exists();
     }
 }

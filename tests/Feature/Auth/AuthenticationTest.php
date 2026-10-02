@@ -14,7 +14,11 @@ class AuthenticationTest extends TestCase
     {
         $response = $this->get('/login');
 
-        $response->assertStatus(200);
+        $response->assertOk()
+            ->assertSee('Selamat datang kembali')
+            ->assertSee('Masuk')
+            ->assertSee('Daftar sekarang')
+            ->assertSee('Lupa kata sandi?');
     }
 
     public function test_users_can_authenticate_using_the_login_screen(): void
@@ -28,6 +32,31 @@ class AuthenticationTest extends TestCase
 
         $this->assertAuthenticated();
         $response->assertRedirect(route('dashboard', absolute: false));
+    }
+
+    public function test_admin_login_redirects_to_admin_panel(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->post('/login', [
+            'email' => $admin->email,
+            'password' => 'password',
+        ])->assertRedirect(route('admin.dashboard'));
+    }
+
+    public function test_courier_login_redirects_to_courier_portal(): void
+    {
+        $account = User::factory()->create(['role' => 'courier']);
+        $account->courier()->create([
+            'name' => $account->name,
+            'phone' => '081234567890',
+            'is_available' => true,
+        ]);
+
+        $this->post('/login', [
+            'email' => $account->email,
+            'password' => 'password',
+        ])->assertRedirect(route('courier.dashboard'));
     }
 
     public function test_users_can_not_authenticate_with_invalid_password(): void
