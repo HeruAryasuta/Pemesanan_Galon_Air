@@ -18,7 +18,40 @@ class ProfileTest extends TestCase
             ->actingAs($user)
             ->get('/profile');
 
-        $response->assertOk();
+        $response->assertOk()
+            ->assertSee('Pengaturan akun')
+            ->assertSee('Informasi pribadi')
+            ->assertSee('Ubah kata sandi')
+            ->assertSee('Alamat pengantaran')
+            ->assertSee('Riwayat pesanan')
+            ->assertSee('Hapus akun permanen');
+    }
+
+    public function test_admin_profile_displays_admin_panel_link(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)
+            ->get('/profile')
+            ->assertOk()
+            ->assertSee('Buka Panel Admin')
+            ->assertSee(route('admin.dashboard'), false);
+
+        $this->get(route('user.home'))
+            ->assertOk()
+            ->assertDontSee('Panel Admin')
+            ->assertDontSee(route('admin.dashboard'), false);
+    }
+
+    public function test_customer_profile_does_not_display_admin_panel_link(): void
+    {
+        $customer = User::factory()->create(['role' => 'customer']);
+
+        $this->actingAs($customer)
+            ->get('/profile')
+            ->assertOk()
+            ->assertDontSee('Buka Panel Admin')
+            ->assertDontSee(route('admin.dashboard'), false);
     }
 
     public function test_profile_information_can_be_updated(): void

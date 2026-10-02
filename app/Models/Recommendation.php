@@ -14,6 +14,14 @@ class Recommendation extends Model
         'generated_at',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'score' => 'float',
+            'generated_at' => 'datetime',
+        ];
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420" fill="none">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="640" y2="420" gradientUnits="userSpaceOnUse"><stop stop-color="#f7f9f8"/><stop offset="1" stop-color="#e5eceb"/></linearGradient><linearGradient id="jug" x1="249" y1="91" x2="392" y2="360" gradientUnits="userSpaceOnUse"><stop stop-color="#c4eafb" stop-opacity=".9"/><stop offset=".52" stop-color="#68b9dc" stop-opacity=".86"/><stop offset="1" stop-color="#2992c0" stop-opacity=".95"/></linearGradient></defs>
+  <path fill="url(#bg)" d="M0 0h640v420H0z"/><path fill="#d9e1e1" d="M0 328h640v92H0z"/><ellipse cx="320" cy="351" rx="105" ry="16" fill="#5c7480" fill-opacity=".16"/>
+  <path d="M290 51h60v38h-60z" rx="8" fill="#f28a45"/><path d="M300 36h40v23h-40z" rx="6" fill="#e66e2f"/><path d="M282 80h76l12 21 28 19 16 188c2 26-15 45-42 49H270c-27-4-44-23-42-49l16-188 28-19 10-21Z" fill="url(#jug)" stroke="#2991bd" stroke-width="5"/>
+  <path d="M257 127h126M247 153h146M238 286h164M237 308h166" stroke="#e1f6ff" stroke-opacity=".76" stroke-width="8"/><path d="M268 111c-8 37-11 87-10 139" stroke="#fff" stroke-opacity=".55" stroke-width="17" stroke-linecap="round"/>
+  <path d="M277 188h86v73h-86z" rx="10" fill="#fff" fill-opacity=".96"/><path d="M285 199h70v27h-70z" rx="5" fill="#f47a3c"/><text x="320" y="218" fill="white" font-family="Arial,sans-serif" font-size="17" font-weight="700" text-anchor="middle">CLEO</text><text x="320" y="244" fill="#327aa0" font-family="Arial,sans-serif" font-size="9" font-weight="700" text-anchor="middle">AIR MINERAL</text>
+  <path d="M246 141h-16v39h16m164-39h16v39h-16" stroke="#2991bd" stroke-width="8" stroke-linecap="round"/>
+</svg>

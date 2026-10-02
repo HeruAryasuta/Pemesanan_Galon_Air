@@ -13,7 +13,7 @@ class OrderController extends Controller
     {
         $orders = $request->user()
             ->orders()
-            ->with(['items.product', 'delivery.courier'])
+            ->with(['items.product', 'delivery.courier', 'address'])
             ->latest()
             ->paginate(10);
 
@@ -24,7 +24,7 @@ class OrderController extends Controller
     {
         abort_if($order->user_id !== $request->user()->id, 403);
 
-        $order->load(['items.product', 'address', 'delivery.courier']);
+        $order->load(['items.product', 'address', 'delivery.courier', 'delivery.routeStop']);
 
         return view('user.orders.show', compact('order'));
     }
