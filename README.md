@@ -21,6 +21,46 @@ Laravel is a web application framework with expressive, elegant syntax. We belie
 
 Laravel is accessible, powerful, and provides tools required for large, robust applications.
 
+## Route optimization (TSP + OSRM)
+
+Admin dapat membuka planner rute untuk memilih pengantaran aktif dan melihat pratinjau urutan, jarak, durasi, serta geometri jalan sebelum menetapkan rute ke kurir. Planner menggunakan OSRM Table untuk membuat matriks jarak jalan, lalu menyelesaikan TSP terbuka dari depo. Held-Karp dipakai untuk maksimal 14 pengantaran; jumlah yang lebih besar memakai nearest-neighbor dan 2-opt. Urutan terpilih dikirim ke OSRM Route untuk geometri dan estimasi durasi. Rute tidak kembali ke depo dan durasi tidak memperhitungkan lalu lintas langsung.
+
+Configure these values in `.env`:
+
+```dotenv
+OSRM_BASE_URL=http://localhost:5000
+ROUTE_DEPOT_LATITUDE=-7.3414987
+ROUTE_DEPOT_LONGITUDE=112.7677984
+```
+
+Jalankan server OSRM dengan profil `driving` di URL yang dikonfigurasi. Koordinat alamat pelanggan dikirim ke server OSRM, jadi gunakan endpoint tepercaya yang Anda kelola. Peta planner menggunakan tile OpenStreetMap di browser.
+
+### Titik alamat otomatis
+
+Di `/addresses`, pengguna dapat memakai lokasi perangkat atau memilih/menggeser marker pada peta. Koordinat mengisi otomatis dari lokasi saat ini; pemilihan titik juga meminta reverse geocoding agar alamat lengkap (dan label bila tersedia serta masih kosong) terisi. Hasilnya tetap dapat diedit sebelum disimpan.
+
+Reverse geocoding menggunakan layanan publik Nominatim. Konfigurasikan `NOMINATIM_BASE_URL`, `NOMINATIM_USER_AGENT` yang deskriptif, dan secara opsional `NOMINATIM_EMAIL`. Koordinat yang dipilih dikirim ke Nominatim; gunakan layanan sesuai kebijakan penggunaan Nominatim. Jika geocoding gagal atau alamat tidak ditemukan, pengguna dapat mengisi alamat secara manual. Akses lokasi browser memerlukan izin pengguna dan secure context (HTTPS atau `localhost`).
+
+### Rute dari lokasi kurir
+
+Pada detail pengantaran aktif, kurir dapat menekan **Tampilkan rute ke tujuan**. Browser meminta lokasi kurir pada saat itu, lalu aplikasi meminta OSRM Route untuk menghitung jalan langsung ke koordinat alamat tujuan. Peta menampilkan garis rute serta jarak dan estimasi waktu. Lokasi tidak dilacak terus-menerus dan tidak disimpan oleh fitur ini. Tombol memerlukan izin lokasi browser, koordinat tujuan, koneksi aplikasi ke OSRM, serta pengantaran yang ditugaskan kepada kurir yang sedang masuk.
+
+## Menyiapkan data demo
+
+Seeder katalog produk dapat dijalankan secara terpisah dan tidak menimpa produk yang sudah ada:
+
+```sh
+php artisan db:seed --class=ProductCatalogSeeder
+```
+
+`DemoCourierRouteSeeder` membuat pelanggan, alamat, pesanan, pengantaran, dan rute OSRM demo. Jalankan setelah tersedia akun kurir dengan email `kurir.demo.20261003@example.test`, produk aktif `galon-aqua-19-liter`, serta OSRM yang dapat diakses aplikasi:
+
+```sh
+php artisan db:seed --class=DemoCourierRouteSeeder
+```
+
+Seeder aman dijalankan ulang saat rute demo sudah dibuat. Seeder akan berhenti dengan pesan kesalahan jika akun kurir belum tersedia, data pesanan demo telah berubah, OSRM tidak dapat menghitung rute, atau kurir sudah memiliki rute pada hari ini. Data akun dan rute demo hanya untuk pengembangan; jangan gunakan kredensial atau data demo pada deployment produksi.
+
 ## Learning Laravel
 
 Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.

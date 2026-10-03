@@ -6,7 +6,7 @@
     <div class="mb-5">
         <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-[#4162a5]">Operasional pengantaran</p>
         <h1 class="mt-1 text-2xl font-extrabold tracking-tight sm:text-3xl">Optimasi Rute</h1>
-        <p class="mt-1 text-sm text-slate-500">Pilih pengantaran, tentukan kurir, lalu tinjau urutan pemberhentian hasil metode nearest neighbor.</p>
+        <p class="mt-1 text-sm text-slate-500">Rencanakan perjalanan dari depo dengan optimasi TSP pada jaringan jalan OSRM.</p>
     </div>
 
     @if (session('success') || session('error') || $errors->any())
@@ -24,6 +24,12 @@
     @if ($missingCoordinatesCount > 0)
         <div class="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900" role="status">
             {{ $missingCoordinatesCount }} pengantaran aktif belum dapat dirutekan karena alamat belum memiliki koordinat latitude dan longitude. Perbarui koordinat alamat sebelum memasukkannya ke rute.
+        </div>
+    @endif
+
+    @if ($routingError)
+        <div class="mb-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs leading-5 text-rose-800" role="alert">
+            {{ $routingError }}
         </div>
     @endif
 
@@ -57,18 +63,11 @@
 
                 <fieldset class="mt-4">
                     <legend class="mb-2 block text-[11px] font-semibold text-slate-600">Target optimasi</legend>
-                    <div class="grid grid-cols-2 gap-2">
-                        <div class="rounded-xl border-2 border-[#31569e] bg-[#edf2ff] px-2 py-2.5 text-center text-[10px] font-bold text-[#12377f]" aria-current="true">
-                            <svg class="mx-auto mb-1 h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 15.5 7 11l3 2 6.5-7M12 6h4.5v4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                            Jarak terpendek
-                        </div>
-                        <div class="rounded-xl border border-[#e4e8f2] bg-slate-50 px-2 py-2.5 text-center text-[10px] font-medium text-slate-400" aria-disabled="true" title="Estimasi waktu tempuh belum tersedia">
-                            <svg class="mx-auto mb-1 h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M10 6v4l2.5 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                            Waktu tercepat
-                        </div>
+                    <div class="rounded-xl border-2 border-[#31569e] bg-[#edf2ff] px-3 py-2.5 text-center text-[10px] font-bold text-[#12377f]" aria-current="true">
+                        Optimasi jarak jalan (TSP)
                     </div>
                 </fieldset>
-                <p class="mt-2 text-[9px] leading-4 text-slate-500">Waktu tempuh dan kondisi lalu lintas belum dihitung.</p>
+                <p class="mt-2 text-[9px] leading-4 text-slate-500">Rute terbuka dimulai dari depo. Estimasi durasi tidak memperhitungkan lalu lintas langsung.</p>
             </section>
 
             <section class="rounded-2xl border border-[#e7ebf5] bg-white p-4 shadow-[0_5px_20px_rgba(29,48,99,0.05)]" aria-labelledby="active-deliveries-heading">
@@ -115,75 +114,27 @@
                     </span>
                     <div>
                         <h2 id="route-map-heading" class="text-xs font-bold text-[#202a3b]">Pratinjau rute</h2>
-                        <p class="text-[9px] text-slate-500">Tampilan skematis dari koordinat pesanan</p>
+                        <p class="text-[9px] text-slate-500">Rute jalan dari OSRM · dimulai dari depo</p>
                     </div>
                 </div>
-                <span class="rounded-full bg-[#f2f5fb] px-2.5 py-1 text-[9px] font-semibold text-slate-600">Gunung Anyar, Surabaya</span>
+                <span class="rounded-full bg-[#f2f5fb] px-2.5 py-1 text-[9px] font-semibold text-slate-600">Depo · {{ number_format((float) config('routing.depot.latitude'), 5, ',', '.') }}, {{ number_format((float) config('routing.depot.longitude'), 5, ',', '.') }}</span>
             </div>
 
-            <div class="relative h-[430px] overflow-hidden bg-[#eaf0ed] sm:h-[520px] xl:h-[570px]">
-                <svg class="absolute inset-0 h-full w-full" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Skema posisi koordinat dan urutan rute pengantaran">
-                    <defs>
-                        <pattern id="route-map-grid" width="110" height="100" patternUnits="userSpaceOnUse" patternTransform="rotate(-8)">
-                            <path d="M0 0H110M0 0V100" fill="none" stroke="#d4dfd8" stroke-width="1"/>
-                        </pattern>
-                        <filter id="route-marker-shadow" x="-50%" y="-50%" width="200%" height="200%">
-                            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#20304a" flood-opacity=".24"/>
-                        </filter>
-                    </defs>
-                    <rect width="1000" height="700" fill="#edf2ed"/>
-                    <rect width="1000" height="700" fill="url(#route-map-grid)"/>
-                    <path d="M-40 100 1040 202M-40 335 1040 244M-40 570 1040 482M105 740 252-40M430 740 535-40M760 740 710-40M965 740 885-40" fill="none" stroke="#d7e2dc" stroke-width="36"/>
-                    <path d="M-40 100 1040 202M-40 335 1040 244M-40 570 1040 482M105 740 252-40M430 740 535-40M760 740 710-40M965 740 885-40" fill="none" stroke="#fffefa" stroke-width="27"/>
-                    <path d="M-20 434 1020 333M315 720 356-20M603 720 620-20" fill="none" stroke="#d8cfa4" stroke-width="8"/>
-                    <path d="M-20 434 1020 333M315 720 356-20M603 720 620-20" fill="none" stroke="#fff5c8" stroke-width="4"/>
-                    <path d="M60 60h165v92H60zm260 30h115v86H320zm365-15h180v106H685zM112 485h142v90H112zm380 42h176v118H492zm323-26h127v113H815z" fill="#dce9dd" stroke="#c8d9cd" stroke-width="2"/>
-                    <path d="M80 205h112m88-80 50 1m290 30 88 1M158 395h94m190-47h115m250 65h78M290 608h100m330-13h74" stroke="#c7d4ce" stroke-width="5" stroke-linecap="round"/>
-
-                    @if ($mapPoints->count() > 1)
-                        <polyline
-                            points="@foreach ($mapPoints as $point){{ number_format($point['x'], 1, '.', '') }},{{ number_format($point['y'], 1, '.', '') }}@if (! $loop->last) @endif @endforeach"
-                            fill="none"
-                            stroke="#fff"
-                            stroke-width="14"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        />
-                        <polyline
-                            points="@foreach ($mapPoints as $point){{ number_format($point['x'], 1, '.', '') }},{{ number_format($point['y'], 1, '.', '') }}@if (! $loop->last) @endif @endforeach"
-                            fill="none"
-                            stroke="#31569e"
-                            stroke-width="8"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        />
-                    @endif
-
-                    @foreach ($mapPoints as $index => $point)
-                        <g transform="translate({{ number_format($point['x'], 1, '.', '') }} {{ number_format($point['y'], 1, '.', '') }})" filter="url(#route-marker-shadow)">
-                            <circle r="24" fill="#fff" opacity=".95"/>
-                            <circle r="18" fill="#12377f"/>
-                            <text y="6" text-anchor="middle" fill="#fff" font-size="17" font-weight="700">{{ $index + 1 }}</text>
-                        </g>
-                    @endforeach
-                </svg>
-
+            <div
+                class="relative h-[430px] overflow-hidden bg-[#eaf0ed] sm:h-[520px] xl:h-[570px]"
+                data-route-map
+                data-route-map-points="{{ json_encode($routeMapPoints, JSON_THROW_ON_ERROR) }}"
+                data-route-map-geometry="{{ json_encode($routeGeometry, JSON_THROW_ON_ERROR) }}"
+                role="img"
+                aria-label="Peta rute jalan dari depo ke setiap titik pengantaran"
+            >
                 <div class="absolute left-3 top-3 inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/95 px-3 py-1.5 text-[9px] font-semibold text-[#38455a] shadow-sm">
                     <span class="h-2 w-2 rounded-full bg-[#31569e]"></span>
                     {{ $routePlan->count() }} titik pengantaran
                 </div>
                 @if ($routePlan->isEmpty())
-                    <div class="absolute inset-0 flex items-center justify-center p-6">
-                        <div class="max-w-xs rounded-2xl border border-white/80 bg-white/90 px-5 py-4 text-center shadow-sm backdrop-blur">
-                            <p class="text-xs font-bold text-[#202a3b]">Pilih pesanan untuk melihat rute</p>
-                            <p class="mt-1 text-[10px] leading-4 text-slate-600">Centang pesanan yang memiliki koordinat, lalu tekan Optimalkan Rute.</p>
-                        </div>
-                    </div>
+                    <p class="absolute bottom-3 left-3 rounded-lg border border-white/80 bg-white/90 px-3 py-2 text-[9px] leading-4 text-slate-600 shadow-sm">Pilih pesanan untuk menampilkan rute.</p>
                 @endif
-                <div class="absolute bottom-3 left-3 rounded-lg border border-white/80 bg-white/90 px-3 py-2 text-[9px] leading-4 text-slate-600 shadow-sm">
-                    <span class="font-bold text-[#202a3b]">Peta skematis, bukan rute jalan raya/GPS</span><br>
-                    Urutan dan jarak menggunakan garis lurus.
-                </div>
             </div>
 
             <div class="flex flex-wrap items-center justify-between gap-3 border-t border-[#e9edf5] bg-white px-4 py-3">
@@ -191,7 +142,7 @@
                     @if ($routePlan->isEmpty())
                         Rute belum dioptimalkan.
                     @else
-                        Urutan nearest neighbor siap ditinjau.
+                        Rute TSP hasil OSRM siap ditinjau.
                     @endif
                 </p>
                 <button type="submit" form="route-preview-form" class="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#12377f] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#09296d] focus:outline-none focus:ring-2 focus:ring-[#31569e] focus:ring-offset-2">
@@ -218,6 +169,10 @@
                     <p class="mt-2 text-[9px] font-medium text-slate-500">Pemberhentian</p>
                     <p class="mt-0.5 text-sm font-extrabold text-[#202a3b]">{{ $routePlan->count() }}<span class="ml-1 text-[10px] font-semibold text-slate-500">titik</span></p>
                 </div>
+                <div class="col-span-2 rounded-xl border border-[#e5ebf8] bg-[#f5f7ff] p-3">
+                    <p class="text-[9px] font-medium text-slate-500">Estimasi waktu jalan</p>
+                    <p class="mt-0.5 text-sm font-extrabold text-[#202a3b]">{{ intdiv($totalDurationSeconds, 3600) }}j {{ intdiv($totalDurationSeconds % 3600, 60) }}m</p>
+                </div>
             </div>
 
             <div class="mt-4 border-t border-[#edf0f7] pt-4">
@@ -235,11 +190,7 @@
                                 <div class="min-w-0 flex-1 pt-0.5">
                                     <p class="truncate text-[10px] font-bold text-[#202a3b]">ORD-{{ $delivery->order->id }}</p>
                                     <p class="truncate text-[9px] text-slate-600">{{ $delivery->order->user->name }}</p>
-                                    @if ($loop->first)
-                                        <p class="mt-1 text-[8px] font-semibold text-[#31569e]">Titik awal urutan</p>
-                                    @else
-                                        <p class="mt-1 text-[8px] text-slate-500">{{ number_format($delivery->segment_distance_meters / 1000, 2, ',', '.') }} km garis lurus dari titik sebelumnya</p>
-                                    @endif
+                                    <p class="mt-1 text-[8px] text-slate-500">{{ number_format($delivery->segment_distance_meters / 1000, 2, ',', '.') }} km dari {{ $loop->first ? 'depo' : 'titik sebelumnya' }} · {{ intdiv($delivery->segment_duration_seconds, 60) }} menit</p>
                                 </div>
                             </li>
                         @endforeach
@@ -263,7 +214,7 @@
             @endif
 
             <p class="mt-4 border-t border-[#edf0f7] pt-3 text-[9px] leading-4 text-slate-500">
-                Estimasi jarak berupa garis lurus antar koordinat. Titik awal memakai ID pengantaran terendah; rute jalan/GPS dan waktu tempuh tidak dihitung.
+                Solver mencari jarak jaringan jalan terpendek dari depo. Untuk maksimal 14 pengantaran digunakan Held-Karp; rute yang lebih besar memakai nearest neighbor dan 2-opt.
             </p>
         </aside>
     </div>

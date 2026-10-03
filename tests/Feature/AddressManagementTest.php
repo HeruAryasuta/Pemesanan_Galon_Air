@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Address;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class AddressManagementTest extends TestCase
@@ -28,6 +29,9 @@ class AddressManagementTest extends TestCase
             ->assertSee($address->full_address)
             ->assertSee('Tambah alamat')
             ->assertSee('Titik lokasi pada peta')
+            ->assertSee('Gunakan lokasi saya')
+            ->assertSee('data-use-current-location', false)
+            ->assertSee('data-location-status', false)
             ->assertSee('name="latitude"', false)
             ->assertSee('name="longitude"', false)
             ->assertSee(route('user.addresses.update', $address), false)
@@ -38,6 +42,55 @@ class AddressManagementTest extends TestCase
     {
         $this->get(route('user.addresses.index'))
             ->assertRedirect(route('login'));
+    }
+
+    public function test_customer_can_reverse_geocode_a_selected_address_point(): void
+    {
+        Http::fake([
+            'https://nominatim.openstreetmap.org/reverse*' => Http::response([
+                'name' => 'Toko Contoh',
+                'display_name' => 'Toko Contoh, Jalan Rungkut, Surabaya, Jawa Timur, Indonesia',
+            ]),
+        ]);
+
+        $this->actingAs(User::factory()->create())
+            ->postJson(route('user.addresses.reverse-geocode'), [
+                'latitude' => '-7.3181234',
+                'longitude' => '112.7681234',
+            ])
+            ->assertOk()
+            ->assertJson([
+                'full_address' => 'Toko Contoh, Jalan Rungkut, Surabaya, Jawa Timur, Indonesia',
+                'label' => 'Toko Contoh',
+            ]);
+
+        Http::assertSent(fn ($request): bool => str_starts_with($request->url(), 'https://nominatim.openstreetmap.org/reverse')
+            && $request->hasHeader('User-Agent', 'PadmatirtaWisesaDepo/1.0')
+            && (float) $request['lat'] === -7.3181234
+            && (float) $request['lon'] === 112.7681234);
+    }
+
+    public function test_reverse_geocoding_rejects_invalid_coordinates(): void
+    {
+        Http::fake();
+
+        $this->actingAs(User::factory()->create())
+            ->postJson(route('user.addresses.reverse-geocode'), [
+                'latitude' => 91,
+                'longitude' => 112,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('latitude');
+
+        Http::assertNothingSent();
+    }
+
+    public function test_reverse_geocoding_requires_authentication(): void
+    {
+        $this->postJson(route('user.addresses.reverse-geocode'), [
+            'latitude' => -7.3181234,
+            'longitude' => 112.7681234,
+        ])->assertUnauthorized();
     }
 
     public function test_customer_can_add_and_edit_their_address(): void

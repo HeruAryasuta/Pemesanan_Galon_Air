@@ -12,6 +12,7 @@ class Route extends Model
         'status',
         'total_distance_meters',
         'total_duration_seconds',
+        'route_geometry',
     ];
 
     protected function casts(): array
@@ -20,6 +21,7 @@ class Route extends Model
             'route_date' => 'date',
             'total_distance_meters' => 'integer',
             'total_duration_seconds' => 'integer',
+            'route_geometry' => 'array',
         ];
     }
 

@@ -5,10 +5,14 @@ namespace App\Http\Controllers\Courier;
 use App\Http\Controllers\Controller;
 use App\Models\Courier;
 use App\Models\Delivery;
+use App\Services\Routing\OsrmTspService;
+use App\Services\Routing\RouteOptimizationException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
+use Throwable;
 
 class DeliveryController extends Controller
 {
@@ -47,6 +51,33 @@ class DeliveryController extends Controller
         ]);
 
         return view('courier.deliveries.show', compact('delivery'));
+    }
+
+    public function routeFromCurrentLocation(Request $request, Delivery $delivery, OsrmTspService $osrmTspService): JsonResponse
+    {
+        $validated = $request->validate([
+            'latitude' => ['required', 'numeric', 'between:-90,90'],
+            'longitude' => ['required', 'numeric', 'between:-180,180'],
+        ]);
+
+        $delivery = $this->ownedDelivery($request, $delivery->id, ['order.address']);
+        if (! in_array($delivery->status, ['assigned', 'in_transit'], true)) {
+            return response()->json(['message' => 'Rute hanya tersedia untuk pengantaran yang masih aktif.'], 422);
+        }
+
+        try {
+            return response()->json($osrmTspService->routeFromLocation(
+                (float) $validated['latitude'],
+                (float) $validated['longitude'],
+                $delivery,
+            ));
+        } catch (RouteOptimizationException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json(['message' => 'Gagal menghitung rute. Silakan coba lagi.'], 502);
+        }
     }
 
     public function updateStatus(Request $request, Delivery $delivery): RedirectResponse

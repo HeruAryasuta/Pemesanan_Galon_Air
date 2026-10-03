@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    'osrm' => [
+        'url' => env('OSRM_BASE_URL', 'http://localhost:5000'),
+    ],
+
+    'nominatim' => [
+        'url' => env('NOMINATIM_BASE_URL', 'https://nominatim.openstreetmap.org'),
+        'user_agent' => env('NOMINATIM_USER_AGENT', 'PadmatirtaWisesaDepo/1.0'),
+        'email' => env('NOMINATIM_EMAIL'),
+    ],
+
 ];

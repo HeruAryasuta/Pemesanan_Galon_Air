@@ -65,6 +65,9 @@ Route::middleware('auth')->name('user.')->group(function () {
     Route::post('/orders/{order}/payment-proof', [OrderPaymentController::class, 'store'])->name('orders.payment-proof');
 
     Route::get('/addresses', [AddressController::class, 'index'])->name('addresses.index');
+    Route::post('/addresses/reverse-geocode', \App\Http\Controllers\User\ReverseGeocodeController::class)
+        ->middleware('throttle:10,1')
+        ->name('addresses.reverse-geocode');
     Route::post('/addresses', [AddressController::class, 'store'])->name('addresses.store');
     Route::put('/addresses/{address}', [AddressController::class, 'update'])->name('addresses.update');
     Route::delete('/addresses/{address}', [AddressController::class, 'destroy'])->name('addresses.destroy');
@@ -75,6 +78,9 @@ Route::prefix('courier')->name('courier.')->middleware(['auth', 'courier'])->gro
     Route::get('/', [\App\Http\Controllers\Courier\DeliveryController::class, 'index'])->name('dashboard');
     Route::get('/history', [\App\Http\Controllers\Courier\DeliveryController::class, 'history'])->name('history');
     Route::get('/deliveries/{delivery}', [\App\Http\Controllers\Courier\DeliveryController::class, 'show'])->name('deliveries.show');
+    Route::post('/deliveries/{delivery}/route-from-location', [\App\Http\Controllers\Courier\DeliveryController::class, 'routeFromCurrentLocation'])
+        ->middleware('throttle:10,1')
+        ->name('deliveries.route-from-location');
     Route::patch('/deliveries/{delivery}/status', [\App\Http\Controllers\Courier\DeliveryController::class, 'updateStatus'])->name('deliveries.status');
 });
 
