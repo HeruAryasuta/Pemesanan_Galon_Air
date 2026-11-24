@@ -31,8 +31,9 @@
                 </div>
                 @if ($user->isAdmin())
                     <a href="{{ route('admin.dashboard') }}" class="inline-flex min-h-9 items-center justify-center rounded-lg bg-[#12377f] px-3 py-2 text-[10px] font-bold text-white transition hover:bg-[#09296d]">Buka Panel Admin</a>
+                @else
+                    <a href="{{ route('user.addresses.index') }}" class="inline-flex min-h-9 items-center justify-center rounded-lg border border-[#dce4f5] px-3 py-2 text-[10px] font-bold text-[#31569e] transition hover:bg-[#edf2ff]">Kelola alamat</a>
                 @endif
-                <a href="{{ route('user.addresses.index') }}" class="inline-flex min-h-9 items-center justify-center rounded-lg border border-[#dce4f5] px-3 py-2 text-[10px] font-bold text-[#31569e] transition hover:bg-[#edf2ff]">Kelola alamat</a>
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
                     <button type="submit" class="inline-flex min-h-9 items-center justify-center rounded-lg border border-[#f1d6d6] px-3 py-2 text-[10px] font-bold text-rose-700 transition hover:bg-rose-50">Keluar</button>
@@ -99,26 +100,28 @@
                 </section>
             </div>
 
-            <section class="mt-4 rounded-2xl border border-[#e8ecf6] bg-white p-4 shadow-[0_4px_14px_rgba(29,48,99,0.04)] sm:p-5" aria-labelledby="account-links-title">
-                <p class="text-[9px] font-bold uppercase tracking-[0.1em] text-[#4162a5]">Akses cepat</p>
-                <h2 id="account-links-title" class="mt-1 text-sm font-bold text-[#202a3b]">Kelola kebutuhan akun Anda</h2>
-                <div class="mt-3 grid gap-2 sm:grid-cols-2">
-                    <a href="{{ route('user.addresses.index') }}" class="flex items-center justify-between gap-3 rounded-xl border border-[#edf0f7] p-3 transition hover:border-[#cbd7f2] hover:bg-[#fbfcff]">
-                        <span>
-                            <span class="block text-xs font-bold text-[#202a3b]">Alamat pengantaran</span>
-                            <span class="mt-1 block text-[10px] text-slate-500">Tambah dan atur alamat tujuan pesanan.</span>
-                        </span>
-                        <span class="text-[#31569e]" aria-hidden="true">→</span>
-                    </a>
-                    <a href="{{ route('user.orders.index') }}" class="flex items-center justify-between gap-3 rounded-xl border border-[#edf0f7] p-3 transition hover:border-[#cbd7f2] hover:bg-[#fbfcff]">
-                        <span>
-                            <span class="block text-xs font-bold text-[#202a3b]">Riwayat pesanan</span>
-                            <span class="mt-1 block text-[10px] text-slate-500">Lihat pesanan dan status pengantaran.</span>
-                        </span>
-                        <span class="text-[#31569e]" aria-hidden="true">→</span>
-                    </a>
-                </div>
-            </section>
+            @unless ($user->isAdmin())
+                <section class="mt-4 rounded-2xl border border-[#e8ecf6] bg-white p-4 shadow-[0_4px_14px_rgba(29,48,99,0.04)] sm:p-5" aria-labelledby="account-links-title">
+                    <p class="text-[9px] font-bold uppercase tracking-[0.1em] text-[#4162a5]">Akses cepat</p>
+                    <h2 id="account-links-title" class="mt-1 text-sm font-bold text-[#202a3b]">Kelola kebutuhan akun Anda</h2>
+                    <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                        <a href="{{ route('user.addresses.index') }}" class="flex items-center justify-between gap-3 rounded-xl border border-[#edf0f7] p-3 transition hover:border-[#cbd7f2] hover:bg-[#fbfcff]">
+                            <span>
+                                <span class="block text-xs font-bold text-[#202a3b]">Alamat pengantaran</span>
+                                <span class="mt-1 block text-[10px] text-slate-500">Tambah dan atur alamat tujuan pesanan.</span>
+                            </span>
+                            <span class="text-[#31569e]" aria-hidden="true">→</span>
+                        </a>
+                        <a href="{{ route('user.orders.index') }}" class="flex items-center justify-between gap-3 rounded-xl border border-[#edf0f7] p-3 transition hover:border-[#cbd7f2] hover:bg-[#fbfcff]">
+                            <span>
+                                <span class="block text-xs font-bold text-[#202a3b]">Riwayat pesanan</span>
+                                <span class="mt-1 block text-[10px] text-slate-500">Lihat pesanan dan status pengantaran.</span>
+                            </span>
+                            <span class="text-[#31569e]" aria-hidden="true">→</span>
+                        </a>
+                    </div>
+                </section>
+            @endunless
 
             <details class="mt-4 rounded-2xl border border-rose-200 bg-white p-4 shadow-[0_4px_14px_rgba(29,48,99,0.03)] sm:p-5" @if ($errors->userDeletion->isNotEmpty()) open @endif>
                 <summary class="cursor-pointer text-xs font-bold text-rose-700">Hapus akun</summary>

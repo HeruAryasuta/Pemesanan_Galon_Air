@@ -42,6 +42,7 @@ const initializeAddressMap = (container) => {
     const addressForm = picker?.closest('form');
     const fullAddressInput = addressForm?.querySelector('[name="full_address"]');
     const labelInput = addressForm?.querySelector('[name="label"]');
+    const serviceZoneInput = addressForm?.querySelector('[name="service_zone_id"]');
 
     if (
         !latitudeInput
@@ -114,7 +115,14 @@ const initializeAddressMap = (container) => {
                     labelInput.value = result.label;
                 }
                 addressLookupStatus.classList.add('text-emerald-700');
-                addressLookupStatus.textContent = 'Alamat berhasil diisi otomatis. Silakan periksa kembali sebelum menyimpan.';
+                if (serviceZoneInput) {
+                    serviceZoneInput.value = result.service_zone_id ? String(result.service_zone_id) : '';
+                    addressLookupStatus.textContent = result.service_zone_id
+                        ? `Alamat dan wilayah ${serviceZoneInput.selectedOptions[0]?.textContent.trim()} berhasil diisi otomatis. Silakan periksa kembali sebelum menyimpan.`
+                        : 'Alamat berhasil diisi otomatis, tetapi wilayah tidak dikenali. Silakan pilih wilayah pengantaran secara manual.';
+                } else {
+                    addressLookupStatus.textContent = 'Alamat berhasil diisi otomatis. Silakan periksa kembali sebelum menyimpan.';
+                }
             } catch (error) {
                 if (error.name === 'AbortError' || currentSequence !== lookupSequence) {
                     return;
@@ -311,6 +319,8 @@ const initializeRouteMap = (container) => {
 };
 
 const initializeCourierRouteMap = (container) => {
+    const depotLatitude = Number.parseFloat(container.dataset.depotLatitude);
+    const depotLongitude = Number.parseFloat(container.dataset.depotLongitude);
     const destinationLatitude = Number.parseFloat(container.dataset.destinationLatitude);
     const destinationLongitude = Number.parseFloat(container.dataset.destinationLongitude);
     const routeButton = container.parentElement?.querySelector('[data-courier-route-button]');
@@ -320,8 +330,12 @@ const initializeCourierRouteMap = (container) => {
         !routeButton
         || !status
         || !container.dataset.routeUrl
+        || !Number.isFinite(depotLatitude)
+        || !Number.isFinite(depotLongitude)
         || !Number.isFinite(destinationLatitude)
         || !Number.isFinite(destinationLongitude)
+        || Math.abs(depotLatitude) > 90
+        || Math.abs(depotLongitude) > 180
         || Math.abs(destinationLatitude) > 90
         || Math.abs(destinationLongitude) > 180
     ) {
@@ -331,12 +345,20 @@ const initializeCourierRouteMap = (container) => {
 
     const map = L.map(container, {
         scrollWheelZoom: false,
-    }).setView([destinationLatitude, destinationLongitude], 15);
+    });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
     }).addTo(map);
+
+    const depot = L.circleMarker([depotLatitude, depotLongitude], {
+        color: '#fff',
+        fillColor: '#12377f',
+        fillOpacity: 1,
+        radius: 9,
+        weight: 3,
+    }).bindTooltip('Depo').addTo(map);
 
     const destination = L.circleMarker([destinationLatitude, destinationLongitude], {
         color: '#fff',
@@ -346,106 +368,74 @@ const initializeCourierRouteMap = (container) => {
         weight: 3,
     }).bindTooltip('Alamat tujuan').addTo(map);
 
-    let courierMarker;
+    map.fitBounds(L.latLngBounds(depot.getLatLng(), destination.getLatLng()), {
+        padding: [32, 32],
+        maxZoom: 15,
+    });
+
     let routeLine;
 
-    routeButton.addEventListener('click', () => {
-        if (!navigator.geolocation) {
-            status.classList.add('text-rose-700');
-            status.textContent = 'Browser ini tidak mendukung pengambilan lokasi. Buka alamat tujuan di aplikasi peta.';
-            return;
-        }
-
+    routeButton.addEventListener('click', async () => {
         routeButton.disabled = true;
         status.classList.remove('text-rose-700', 'text-emerald-700');
-        status.textContent = 'Mengambil lokasi kurir saat ini…';
+        status.textContent = 'Menghitung rute jalan dari depo ke alamat tujuan…';
 
-        navigator.geolocation.getCurrentPosition(async (position) => {
-            const latitude = position.coords.latitude;
-            const longitude = position.coords.longitude;
-            const currentLocation = L.latLng(latitude, longitude);
-            courierMarker?.remove();
-            courierMarker = L.circleMarker(currentLocation, {
-                color: '#fff',
-                fillColor: '#12377f',
-                fillOpacity: 1,
-                radius: 9,
-                weight: 3,
-            }).bindTooltip('Lokasi kurir').addTo(map);
+        try {
+            const response = await fetch(container.dataset.routeUrl, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                },
+            });
+            const result = await response.json();
 
-            try {
-                status.textContent = 'Menghitung rute jalan ke alamat tujuan…';
-                const response = await fetch(container.dataset.routeUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
-                    },
-                    body: JSON.stringify({ latitude, longitude }),
-                });
-                const result = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(result.message || 'Rute jalan tidak dapat dihitung.');
-                }
-
-                if (
-                    !Array.isArray(result.geometry)
-                    || result.geometry.length < 2
-                    || !Number.isFinite(result.distance_meters)
-                    || !Number.isFinite(result.duration_seconds)
-                ) {
-                    throw new Error('Respons rute dari server tidak valid.');
-                }
-
-                const coordinates = result.geometry.map(([routeLongitude, routeLatitude]) => [
-                    routeLatitude,
-                    routeLongitude,
-                ]);
-                const validCoordinates = coordinates.every(([routeLatitude, routeLongitude]) => (
-                    Number.isFinite(routeLatitude)
-                    && Math.abs(routeLatitude) <= 90
-                    && Number.isFinite(routeLongitude)
-                    && Math.abs(routeLongitude) <= 180
-                ));
-                if (!validCoordinates) {
-                    throw new Error('Koordinat rute dari server tidak valid.');
-                }
-
-                routeLine?.remove();
-                routeLine = L.polyline(coordinates, {
-                    color: '#12377f',
-                    weight: 6,
-                    opacity: 0.88,
-                }).addTo(map);
-
-                const bounds = routeLine.getBounds();
-                bounds.extend(currentLocation);
-                bounds.extend(destination.getLatLng());
-                map.fitBounds(bounds, { padding: [32, 32], maxZoom: 16 });
-                status.classList.add('text-emerald-700');
-                status.textContent = `Rute jalan: ${(result.distance_meters / 1000).toFixed(1)} km · sekitar ${Math.max(1, Math.round(result.duration_seconds / 60))} menit dari lokasi yang baru diambil.`;
-            } catch (error) {
-                status.classList.add('text-rose-700');
-                status.textContent = error.message || 'Rute tidak dapat dihitung. Periksa koneksi OSRM lalu coba lagi.';
-            } finally {
-                routeButton.disabled = false;
+            if (!response.ok) {
+                throw new Error(result.message || 'Rute jalan tidak dapat dihitung.');
             }
-        }, (error) => {
-            const messages = {
-                [error.PERMISSION_DENIED]: 'Izin lokasi ditolak. Izinkan akses lokasi browser untuk menghitung rute.',
-                [error.POSITION_UNAVAILABLE]: 'Lokasi kurir tidak tersedia. Periksa GPS atau koneksi lalu coba lagi.',
-                [error.TIMEOUT]: 'Pengambilan lokasi terlalu lama. Coba lagi.',
-            };
+
+            if (
+                !Array.isArray(result.geometry)
+                || result.geometry.length < 2
+                || !Number.isFinite(result.distance_meters)
+                || !Number.isFinite(result.duration_seconds)
+            ) {
+                throw new Error('Respons rute dari server tidak valid.');
+            }
+
+            const coordinates = result.geometry.map(([routeLongitude, routeLatitude]) => [
+                routeLatitude,
+                routeLongitude,
+            ]);
+            const validCoordinates = coordinates.every(([routeLatitude, routeLongitude]) => (
+                Number.isFinite(routeLatitude)
+                && Math.abs(routeLatitude) <= 90
+                && Number.isFinite(routeLongitude)
+                && Math.abs(routeLongitude) <= 180
+            ));
+            if (!validCoordinates) {
+                throw new Error('Koordinat rute dari server tidak valid.');
+            }
+
+            routeLine?.remove();
+            routeLine = L.polyline(coordinates, {
+                color: '#12377f',
+                weight: 6,
+                opacity: 0.88,
+            }).addTo(map);
+
+            const bounds = routeLine.getBounds();
+            bounds.extend(depot.getLatLng());
+            bounds.extend(destination.getLatLng());
+            map.fitBounds(bounds, { padding: [32, 32], maxZoom: 16 });
+            status.classList.add('text-emerald-700');
+            status.textContent = `Rute dari depo: ${(result.distance_meters / 1000).toFixed(1)} km · sekitar ${Math.max(1, Math.round(result.duration_seconds / 60))} menit.`;
+        } catch (error) {
             status.classList.add('text-rose-700');
-            status.textContent = messages[error.code] || 'Lokasi kurir tidak dapat diambil.';
+            status.textContent = error.message || 'Rute tidak dapat dihitung. Periksa koneksi OSRM lalu coba lagi.';
+        } finally {
             routeButton.disabled = false;
-        }, {
-            enableHighAccuracy: true,
-            maximumAge: 0,
-            timeout: 15000,
-        });
+        }
     });
 };
 
@@ -458,3 +448,34 @@ document.querySelectorAll('[data-address-map]').forEach((container) => {
 
 document.querySelectorAll('[data-route-map]').forEach(initializeRouteMap);
 document.querySelectorAll('[data-courier-route-map]').forEach(initializeCourierRouteMap);
+
+document.querySelectorAll('[data-product-image-input]').forEach((input) => {
+    const previewContainer = input.parentElement?.querySelector('[data-product-image-preview-container]');
+    const previewImage = previewContainer?.querySelector('[data-product-image-preview]');
+    const previewName = previewContainer?.querySelector('[data-product-image-preview-name]');
+
+    if (!previewContainer || !previewImage || !previewName) {
+        return;
+    }
+
+    let previewUrl;
+    input.addEventListener('change', () => {
+        if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+            previewUrl = undefined;
+        }
+
+        const file = input.files?.[0];
+        if (!file) {
+            previewContainer.classList.add('hidden');
+            previewContainer.classList.remove('flex');
+            return;
+        }
+
+        previewUrl = URL.createObjectURL(file);
+        previewImage.src = previewUrl;
+        previewName.textContent = `${file.name} dipilih. Simpan perubahan untuk mengganti foto produk.`;
+        previewContainer.classList.remove('hidden');
+        previewContainer.classList.add('flex');
+    });
+});

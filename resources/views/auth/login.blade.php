@@ -11,7 +11,7 @@
 
     @if ($errors->any())
         <div class="mt-5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800" role="alert">
-            <p class="font-semibold">Tidak dapat masuk. Periksa kembali email dan kata sandi Anda.</p>
+            <p class="font-semibold">Tidak dapat masuk. Periksa kembali email/username dan kata sandi Anda.</p>
             <x-input-error :messages="$errors->all()" class="mt-1" />
         </div>
     @endif
@@ -20,8 +20,8 @@
         @csrf
 
         <div>
-            <label for="email" class="mb-1.5 block text-xs font-semibold text-slate-700">Email</label>
-            <input id="email" name="email" type="email" value="{{ old('email') }}" required autofocus autocomplete="username" class="block w-full rounded-xl border-[#e0e6f3] px-3.5 py-2.5 text-sm text-slate-800 shadow-sm placeholder:text-slate-400 focus:border-[#31569e] focus:ring-[#31569e]" placeholder="nama@email.com">
+            <label for="email" class="mb-1.5 block text-xs font-semibold text-slate-700">Email atau username</label>
+            <input id="email" name="email" type="text" value="{{ old('email') }}" required autofocus autocomplete="username" class="block w-full rounded-xl border-[#e0e6f3] px-3.5 py-2.5 text-sm text-slate-800 shadow-sm placeholder:text-slate-400 focus:border-[#31569e] focus:ring-[#31569e]" placeholder="nama@email.com atau username kurir">
             <x-input-error :messages="$errors->get('email')" class="mt-1.5 text-xs text-rose-600" />
         </div>
 

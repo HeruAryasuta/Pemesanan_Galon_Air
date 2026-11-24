@@ -20,14 +20,19 @@ class DeliveryController extends Controller
     {
         $courier = $request->user()->courier;
         $deliveries = $courier->deliveries()
-            ->with(['order.user', 'order.address', 'routeStop.route'])
+            ->with(['order.user', 'order.address', 'routeStop.route.stops.delivery.order.address'])
             ->whereIn('status', ['assigned', 'in_transit'])
             ->whereHas('order', fn ($query) => $query->whereNotIn('status', ['cancelled', 'delivered']))
             ->latest()
             ->get();
+        $assignedRoutes = $deliveries->pluck('routeStop.route')
+            ->filter()
+            ->unique('id')
+            ->sortBy('route_date')
+            ->values();
         $completedCount = $courier->deliveries()->where('status', 'delivered')->count();
 
-        return view('courier.deliveries.index', compact('courier', 'deliveries', 'completedCount'));
+        return view('courier.deliveries.index', compact('courier', 'deliveries', 'assignedRoutes', 'completedCount'));
     }
 
     public function history(Request $request): View
@@ -53,24 +58,15 @@ class DeliveryController extends Controller
         return view('courier.deliveries.show', compact('delivery'));
     }
 
-    public function routeFromCurrentLocation(Request $request, Delivery $delivery, OsrmTspService $osrmTspService): JsonResponse
+    public function routeFromDepot(Request $request, Delivery $delivery, OsrmTspService $osrmTspService): JsonResponse
     {
-        $validated = $request->validate([
-            'latitude' => ['required', 'numeric', 'between:-90,90'],
-            'longitude' => ['required', 'numeric', 'between:-180,180'],
-        ]);
-
         $delivery = $this->ownedDelivery($request, $delivery->id, ['order.address']);
         if (! in_array($delivery->status, ['assigned', 'in_transit'], true)) {
             return response()->json(['message' => 'Rute hanya tersedia untuk pengantaran yang masih aktif.'], 422);
         }
 
         try {
-            return response()->json($osrmTspService->routeFromLocation(
-                (float) $validated['latitude'],
-                (float) $validated['longitude'],
-                $delivery,
-            ));
+            return response()->json($osrmTspService->routeFromDepot($delivery));
         } catch (RouteOptimizationException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
         } catch (Throwable $exception) {
@@ -102,6 +98,7 @@ class DeliveryController extends Controller
 
                 $lockedDelivery->update(['status' => 'in_transit']);
                 $order->update(['status' => 'processing']);
+                $lockedDelivery->routeStop?->route?->update(['status' => 'in_progress']);
 
                 return;
             }
@@ -114,6 +111,12 @@ class DeliveryController extends Controller
                 'delivered_at' => now(),
             ]);
             $order->update(['status' => 'delivered']);
+            $route = $lockedDelivery->routeStop?->route;
+            if ($route && ! $route->stops()
+                ->whereHas('delivery', fn ($deliveries) => $deliveries->where('status', '!=', 'delivered'))
+                ->exists()) {
+                $route->update(['status' => 'completed']);
+            }
 
             $hasActiveDeliveries = $lockedCourier->deliveries()
                 ->whereIn('status', ['assigned', 'in_transit'])

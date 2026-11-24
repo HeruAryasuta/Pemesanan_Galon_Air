@@ -41,9 +41,15 @@ Di `/addresses`, pengguna dapat memakai lokasi perangkat atau memilih/menggeser 
 
 Reverse geocoding menggunakan layanan publik Nominatim. Konfigurasikan `NOMINATIM_BASE_URL`, `NOMINATIM_USER_AGENT` yang deskriptif, dan secara opsional `NOMINATIM_EMAIL`. Koordinat yang dipilih dikirim ke Nominatim; gunakan layanan sesuai kebijakan penggunaan Nominatim. Jika geocoding gagal atau alamat tidak ditemukan, pengguna dapat mengisi alamat secara manual. Akses lokasi browser memerlukan izin pengguna dan secure context (HTTPS atau `localhost`).
 
-### Rute dari lokasi kurir
+### Rute dari depo
 
-Pada detail pengantaran aktif, kurir dapat menekan **Tampilkan rute ke tujuan**. Browser meminta lokasi kurir pada saat itu, lalu aplikasi meminta OSRM Route untuk menghitung jalan langsung ke koordinat alamat tujuan. Peta menampilkan garis rute serta jarak dan estimasi waktu. Lokasi tidak dilacak terus-menerus dan tidak disimpan oleh fitur ini. Tombol memerlukan izin lokasi browser, koordinat tujuan, koneksi aplikasi ke OSRM, serta pengantaran yang ditugaskan kepada kurir yang sedang masuk.
+Pada detail pengantaran aktif, kurir dapat menekan **Tampilkan rute dari depo**. Aplikasi memakai koordinat depo (`ROUTE_DEPOT_LATITUDE` dan `ROUTE_DEPOT_LONGITUDE`) sebagai titik awal, lalu meminta OSRM Route menghitung jalan menuju koordinat alamat tujuan. Peta menampilkan depo, tujuan, garis rute, jarak, dan estimasi waktu. Fitur ini tidak memerlukan izin lokasi kurir.
+
+### Kapasitas kendaraan dan wilayah kurir
+
+Setiap produk dihitung sebagai satu unit muatan per jumlah item, tanpa membedakan satuan produk. Kapasitas maksimum: sepeda motor 2 unit, Tosa 10 unit, pick up 20 unit, dan truck 40 unit. Pesanan atau rute yang melebihi kapasitas ditolak dan tidak dipecah ke kurir lain.
+
+Pelanggan memilih wilayah pada alamat pengantaran: Wilayah 1 (Waru/Wadung Asri), Wilayah 2 (Gedangan), Wilayah 3 (Sedati), Wilayah 4 (Rungkut), Wilayah 5 (Gunung Anyar), atau Wilayah 6 (Sukolilo). Admin menetapkan setiap kurir ke satu wilayah. Setiap wilayah memiliki satu slot kurir awal; slot tambahan dapat ditambahkan dari halaman **Kelola Kurir**. Alamat lama yang belum memiliki wilayah perlu diperbarui sebelum pesanannya dapat ditugaskan atau dimasukkan ke rute.
 
 ## Menyiapkan data demo
 
@@ -52,6 +58,8 @@ Seeder katalog produk dapat dijalankan secara terpisah dan tidak menimpa produk 
 ```sh
 php artisan db:seed --class=ProductCatalogSeeder
 ```
+
+Unggahan foto produk disimpan pada disk publik. Jalankan `php artisan storage:link` sekali setelah setup agar foto yang diunggah dapat ditampilkan melalui `/storage`. Untuk memakai gambar yang ditemukan di browser, unduh/simpan gambar ke perangkat terlebih dahulu lalu pilih file JPEG, PNG, atau WebP (maks. 2 MB) pada formulir produk.
 
 `DemoCourierRouteSeeder` membuat pelanggan, alamat, pesanan, pengantaran, dan rute OSRM demo. Jalankan setelah tersedia akun kurir dengan email `kurir.demo.20261003@example.test`, produk aktif `galon-aqua-19-liter`, serta OSRM yang dapat diakses aplikasi:
 

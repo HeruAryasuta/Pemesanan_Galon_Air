@@ -48,7 +48,7 @@
         @endif
 
         <main>
-            <section id="beranda" class="relative isolate flex min-h-[325px] items-center justify-center overflow-hidden bg-[#f7f8fc] px-5 py-12 text-center sm:min-h-[345px]">
+            <section id="beranda" x-data="{ activeSlide: 0 }" class="relative isolate flex min-h-[430px] items-center justify-center overflow-hidden bg-[#f7f8fc] px-5 pt-2 pb-5 text-center sm:min-h-[470px] sm:pt-2 sm:pb-6" aria-label="Beranda dan produk terlaris">
                 <div class="absolute inset-0 -z-10" aria-hidden="true">
                     <svg class="absolute inset-0 h-full w-full opacity-[0.18]" viewBox="0 0 1440 520" preserveAspectRatio="xMidYMid slice" fill="none">
                         <path d="M0 360h1440v160H0z" fill="#8290A9" fill-opacity=".24"/>
@@ -68,20 +68,79 @@
                     <div class="absolute left-[8%] top-12 h-48 w-32 rounded-t-3xl border border-white/60 bg-white/20 blur-[2px] sm:left-[14%] sm:w-44"></div>
                     <div class="absolute right-[7%] top-8 h-52 w-40 rounded-t-3xl border border-white/70 bg-white/25 blur-[2px] sm:right-[13%] sm:w-56"></div>
                 </div>
-                <div class="mx-auto max-w-3xl">
-                    <span class="inline-flex rounded-full bg-[#e1ebff] px-3 py-1.5 text-[10px] font-semibold text-[#214b9a] sm:text-xs">
-                        Layanan Pengantaran Cepat &amp; Terpercaya
-                    </span>
-                    <h1 class="mx-auto mt-5 max-w-[480px] text-[26px] font-bold leading-tight tracking-tight text-[#172033] sm:text-[28px]">
-                        Pesan Air Galon, LPG &amp; Minuman dari Rumah
-                    </h1>
-                    <p class="mx-auto mt-3 max-w-xl text-xs leading-5 text-slate-600 sm:text-sm sm:leading-6">
-                        Pesan kebutuhan harian dengan mudah. Melayani pengiriman di Gunung Anyar<br class="hidden sm:block"> dan sekitarnya.
-                    </p>
-                    <a href="{{ route('user.products.index') }}" class="mt-7 inline-flex items-center gap-2 rounded-lg bg-[#39d2ec] px-5 py-3 text-xs font-bold text-[#073b66] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#22c4e0]">
-                        Mulai Belanja
-                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </a>
+                <div class="relative z-10 mx-auto w-full max-w-7xl">
+                    <div class="home-hero-viewport">
+                        <div class="home-hero-track" :style="`transform: translateX(-${activeSlide * 50}%);`">
+                            <div id="beranda-slide" class="home-hero-slide flex items-center justify-center" :aria-hidden="activeSlide !== 0" :inert="activeSlide !== 0" role="group" aria-roledescription="slide" aria-label="1 dari 2">
+                                <div class="mx-auto max-w-3xl">
+                                    <span class="inline-flex rounded-full bg-[#e1ebff] px-3 py-1.5 text-[10px] font-semibold text-[#214b9a] sm:text-xs">
+                                        Layanan Pengantaran Cepat &amp; Terpercaya
+                                    </span>
+                                    <h1 class="mx-auto mt-5 max-w-[480px] text-[26px] font-bold leading-tight tracking-tight text-[#172033] sm:text-[28px]">
+                                        Pesan Air Galon, LPG &amp; Minuman dari Rumah
+                                    </h1>
+                                    <p class="mx-auto mt-3 max-w-xl text-xs leading-5 text-slate-600 sm:text-sm sm:leading-6">
+                                        Pesan kebutuhan harian dengan mudah. Melayani pengiriman di Gunung Anyar<br class="hidden sm:block"> dan sekitarnya.
+                                    </p>
+                                    <div class="mt-7 flex flex-wrap items-center justify-center gap-3">
+                                        <a href="{{ route('user.products.index') }}" class="inline-flex items-center gap-2 rounded-lg bg-[#39d2ec] px-5 py-3 text-xs font-bold text-[#073b66] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#22c4e0]">
+                                            Mulai Belanja
+                                            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                        </a>
+                                        <a href="{{ route('courier-applications.create') }}" class="inline-flex items-center rounded-lg border border-[#d1d9e8] bg-white/80 px-5 py-3 text-xs font-bold text-[#31569e] transition hover:bg-white hover:text-[#09296d]">Daftar jadi kurir</a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="produk-populer" class="home-hero-slide" :aria-hidden="activeSlide !== 1" :inert="activeSlide !== 1" role="group" aria-roledescription="slide" aria-label="2 dari 2">
+                                <div class="mb-4 flex flex-wrap items-end justify-between gap-3 text-left sm:mb-5">
+                                    <div>
+                                        <span class="inline-flex rounded-full bg-[#e8efff] px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#31569e]">Pilihan pelanggan</span>
+                                        <h2 class="mt-2 text-xl font-bold tracking-tight text-[#172033] sm:text-2xl">Produk Terlaris</h2>
+                                        <p class="mt-1 text-[10px] leading-4 text-slate-600 sm:text-xs">Produk populer berdasarkan jumlah unit dalam pesanan yang tidak dibatalkan.</p>
+                                    </div>
+                                    <a href="{{ route('user.products.index') }}" class="inline-flex items-center gap-1 text-[10px] font-bold text-[#31569e] hover:text-[#09296d] sm:text-xs">
+                                        Lihat semua produk
+                                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                    </a>
+                                </div>
+
+                                @if ($popularProducts->isNotEmpty())
+                                    <div class="home-popular-products flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 text-left lg:grid lg:snap-none lg:overflow-visible lg:pb-0 lg:gap-4" aria-label="Daftar produk terlaris">
+                                        @foreach ($popularProducts as $product)
+                                            <div class="w-56 shrink-0 snap-start lg:w-auto">
+                                                <x-product-card :product="$product" />
+                                                <p class="mt-1.5 text-center text-[9px] font-semibold text-slate-500">
+                                                    {{ number_format((int) $product->units_sold, 0, ',', '.') }} unit terjual
+                                                    <span class="mx-1 text-slate-300" aria-hidden="true">·</span>
+                                                    {{ number_format((int) $product->transaction_count, 0, ',', '.') }} pesanan
+                                                </p>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @else
+                                    <div class="rounded-2xl border border-dashed border-[#d8e0f0] bg-white/80 px-5 py-6 text-center">
+                                        <p class="text-sm font-semibold text-[#202a3b]">Belum ada data penjualan</p>
+                                        <p class="mt-1 text-xs text-slate-500">Produk terlaris akan tampil setelah tersedia pesanan yang tidak dibatalkan.</p>
+                                        <a href="{{ route('user.products.index') }}" class="mt-3 inline-flex rounded-lg bg-[#12377f] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#09296d]">
+                                            Jelajahi katalog
+                                        </a>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-5 flex items-center justify-center gap-3" role="group" aria-label="Kontrol slide beranda">
+                        <button type="button" @click="activeSlide = activeSlide === 0 ? 1 : 0" class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#dce4f5] bg-white/90 text-[#31569e] shadow-sm transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#31569e]" aria-label="Slide sebelumnya">
+                            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16 10H4m5 5-5-5 5-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                        <button type="button" @click="activeSlide = 0" :aria-pressed="activeSlide === 0" class="h-2.5 w-2.5 rounded-full transition focus:outline-none focus:ring-2 focus:ring-[#31569e] focus:ring-offset-2" :class="activeSlide === 0 ? 'bg-[#12377f]' : 'bg-[#b8c5dd]'" aria-label="Tampilkan slide beranda"></button>
+                        <button type="button" @click="activeSlide = 1" :aria-pressed="activeSlide === 1" class="h-2.5 w-2.5 rounded-full transition focus:outline-none focus:ring-2 focus:ring-[#31569e] focus:ring-offset-2" :class="activeSlide === 1 ? 'bg-[#12377f]' : 'bg-[#b8c5dd]'" aria-label="Tampilkan slide Produk Terlaris"></button>
+                        <button type="button" @click="activeSlide = activeSlide === 0 ? 1 : 0" class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#dce4f5] bg-white/90 text-[#31569e] shadow-sm transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#31569e]" aria-label="Slide berikutnya">
+                            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                    </div>
                 </div>
             </section>
 

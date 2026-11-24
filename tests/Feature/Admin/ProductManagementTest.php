@@ -101,6 +101,36 @@ class ProductManagementTest extends TestCase
         $this->assertSame('images/products/existing.svg', $product->image_path);
     }
 
+    public function test_admin_can_replace_a_product_image(): void
+    {
+        Storage::fake('public');
+        Storage::disk('public')->put('products/old-image.png', 'old image');
+        $admin = User::factory()->create(['role' => 'admin']);
+        $category = $this->createCategory();
+        $product = $this->createProduct($category, ['image_path' => 'products/old-image.png']);
+
+        $this->actingAs($admin)
+            ->put(route('admin.products.update', $product), [
+                'category_id' => $category->id,
+                'name' => $product->name,
+                'price' => $product->price,
+                'stock' => $product->stock,
+                'unit' => $product->unit,
+                'is_active' => '1',
+                'image' => UploadedFile::fake()->createWithContent(
+                    'replacement.png',
+                    base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=')
+                ),
+            ])
+            ->assertRedirect(route('admin.products.index'))
+            ->assertSessionHas('success', 'Produk berhasil diperbarui.');
+
+        $product->refresh();
+        $this->assertNotSame('products/old-image.png', $product->image_path);
+        Storage::disk('public')->assertExists($product->image_path);
+        Storage::disk('public')->assertMissing('products/old-image.png');
+    }
+
     public function test_admin_can_toggle_product_availability(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);

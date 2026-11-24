@@ -8,6 +8,7 @@ use App\Models\Delivery;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Models\ServiceZone;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -34,7 +35,11 @@ class CheckoutTest extends TestCase
     {
         $user = User::factory()->create();
         $product = $this->createProduct();
-        $address = $this->createAddress($user, ['is_primary' => true]);
+        $zone = ServiceZone::where('code', 'WIL-05')->firstOrFail();
+        $address = $this->createAddress($user, [
+            'is_primary' => true,
+            'service_zone_id' => $zone->id,
+        ]);
 
         $this->actingAs($user)
             ->withSession(['cart' => [$product->id => 2]])
@@ -43,6 +48,11 @@ class CheckoutTest extends TestCase
             ->assertSee('Pilih alamat pengantaran')
             ->assertSee($address->label)
             ->assertSee($address->full_address)
+            ->assertSee($zone->name)
+            ->assertSee($zone->area_description)
+            ->assertSee('id="checkout-new-service-zone"', false)
+            ->assertSee('name="service_zone_id"', false)
+            ->assertSee('value="'.$zone->id.'"', false)
             ->assertSee('Galon Aqua')
             ->assertSee('Rp42.000')
             ->assertSee('Biaya pengantaran')
@@ -67,10 +77,121 @@ class CheckoutTest extends TestCase
             ->withSession(['cart' => [$product->id => 1]])
             ->get(route('user.checkout.index'))
             ->assertOk()
-            ->assertSee('Tambahkan alamat pengantaran terlebih dahulu')
-            ->assertSee(route('user.addresses.store'), false)
-            ->assertSee('Simpan alamat')
-            ->assertSee('Tambahkan alamat untuk lanjut');
+            ->assertSee('Belum ada alamat tersimpan')
+            ->assertSee('id="checkout-address-new"', false)
+            ->assertSee('name="save_address"', false)
+            ->assertSee('Buat pesanan');
+    }
+
+    public function test_customer_can_place_order_with_a_new_address_without_saving_it_first(): void
+    {
+        $user = User::factory()->create();
+        $product = $this->createProduct();
+        $zone = ServiceZone::where('code', 'WIL-05')->firstOrFail();
+
+        $this->actingAs($user)
+            ->withSession(['cart' => [$product->id => 1]])
+            ->post(route('user.checkout.store'), [
+                'address_id' => 'new',
+                'label' => 'Rumah',
+                'full_address' => 'Jl. Gunung Anyar No. 10, Surabaya',
+                'service_zone_id' => $zone->id,
+                'payment_method' => 'cod',
+            ])
+            ->assertRedirect(route('user.orders.index'))
+            ->assertSessionHas('success', 'Pesanan berhasil dibuat.');
+
+        $this->assertDatabaseHas('addresses', [
+            'user_id' => $user->id,
+            'label' => 'Rumah',
+            'service_zone_id' => $zone->id,
+            'is_saved' => false,
+        ]);
+
+        $address = Address::sole();
+        $this->assertSame($address->id, Order::sole()->address_id);
+
+        $this->actingAs($user)
+            ->get(route('user.addresses.index'))
+            ->assertOk()
+            ->assertDontSee('Jl. Gunung Anyar No. 10, Surabaya');
+    }
+
+    public function test_customer_can_save_a_new_checkout_address_for_future_use(): void
+    {
+        $user = User::factory()->create();
+        $product = $this->createProduct();
+        $zone = ServiceZone::where('code', 'WIL-05')->firstOrFail();
+
+        $this->actingAs($user)
+            ->withSession(['cart' => [$product->id => 1]])
+            ->post(route('user.checkout.store'), [
+                'address_id' => 'new',
+                'label' => 'Rumah',
+                'full_address' => 'Jl. Gunung Anyar No. 10, Surabaya',
+                'service_zone_id' => $zone->id,
+                'save_address' => '1',
+                'is_primary' => '1',
+                'payment_method' => 'cod',
+            ])
+            ->assertRedirect(route('user.orders.index'));
+
+        $this->assertDatabaseHas('addresses', [
+            'user_id' => $user->id,
+            'service_zone_id' => $zone->id,
+            'is_saved' => true,
+            'is_primary' => true,
+        ]);
+    }
+
+    public function test_checkout_suggests_and_saves_a_region_for_a_legacy_address(): void
+    {
+        $user = User::factory()->create();
+        $product = $this->createProduct();
+        $address = $this->createAddress($user, [
+            'full_address' => 'Jl. Keputih, Kecamatan Sukolilo, Surabaya',
+            'is_primary' => true,
+            'service_zone_id' => null,
+        ]);
+        $zone = ServiceZone::where('code', 'WIL-06')->firstOrFail();
+
+        $this->actingAs($user)
+            ->withSession(['cart' => [$product->id => 1]])
+            ->get(route('user.checkout.index'))
+            ->assertOk()
+            ->assertSee('id="checkout-address-zone-'.$address->id.'"', false)
+            ->assertSee('value="'.$zone->id.'" selected', false);
+
+        $this->withSession(['cart' => [$product->id => 1]])
+            ->post(route('user.checkout.store'), [
+                'address_id' => $address->id,
+                'service_zone_ids' => [$address->id => $zone->id],
+                'payment_method' => 'cod',
+            ])
+            ->assertRedirect(route('user.orders.index'))
+            ->assertSessionHas('success', 'Pesanan berhasil dibuat.');
+
+        $this->assertDatabaseHas('addresses', [
+            'id' => $address->id,
+            'service_zone_id' => $zone->id,
+        ]);
+    }
+
+    public function test_checkout_requires_a_region_for_an_unconfigured_saved_address(): void
+    {
+        $user = User::factory()->create();
+        $product = $this->createProduct();
+        $address = $this->createAddress($user, ['service_zone_id' => null]);
+
+        $this->actingAs($user)
+            ->withSession(['cart' => [$product->id => 1]])
+            ->post(route('user.checkout.store'), [
+                'address_id' => $address->id,
+                'payment_method' => 'cod',
+            ])
+            ->assertSessionHasErrors('service_zone_ids.'.$address->id);
+
+        $this->assertSame(0, Order::count());
     }
 
     public function test_customer_can_create_an_order_from_checkout(): void
@@ -294,6 +415,7 @@ class CheckoutTest extends TestCase
         return $user->addresses()->create(array_merge([
             'label' => 'Rumah',
             'full_address' => 'Jl. Gunung Anyar No. 10, Surabaya',
+            'service_zone_id' => ServiceZone::where('code', 'WIL-05')->value('id'),
             'is_primary' => false,
         ], $attributes));
     }

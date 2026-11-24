@@ -9,6 +9,7 @@ use App\Models\Delivery;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Models\ServiceZone;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -108,6 +109,7 @@ class OrderManagementTest extends TestCase
             'name' => 'Siti Aminah',
             'phone' => '081234567891',
             'vehicle_type' => 'Sepeda motor',
+            'service_zone_id' => ServiceZone::query()->where('code', 'WIL-05')->value('id'),
             'is_available' => true,
         ]);
 
@@ -119,6 +121,82 @@ class OrderManagementTest extends TestCase
         $this->assertSame($courier->id, $order->delivery->fresh()->courier_id);
         $this->assertSame('assigned', $order->delivery->fresh()->status);
         $this->assertFalse($courier->fresh()->is_available);
+    }
+
+    public function test_order_assignment_rejects_a_courier_from_a_different_zone(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        [, $order] = $this->createOrder();
+        $courier = Courier::create([
+            'name' => 'Kurir Wilayah Lain',
+            'phone' => '081234567895',
+            'vehicle_type' => 'Truck',
+            'service_zone_id' => ServiceZone::query()->where('code', 'WIL-04')->value('id'),
+            'is_available' => true,
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.orders.assign-courier', $order), ['courier_id' => $courier->id])
+            ->assertRedirect()
+            ->assertSessionHas('error', 'Wilayah kurir tidak sesuai dengan wilayah alamat pengantaran.');
+
+        $this->assertNull($order->delivery->fresh()->courier_id);
+    }
+
+    public function test_order_assignment_blocks_load_over_vehicle_capacity(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        [, $order] = $this->createOrder();
+        $order->items()->update(['quantity' => 3]);
+        $courier = Courier::create([
+            'name' => 'Kurir Motor',
+            'phone' => '081234567896',
+            'vehicle_type' => 'Sepeda motor',
+            'service_zone_id' => ServiceZone::query()->where('code', 'WIL-05')->value('id'),
+            'is_available' => true,
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.orders.assign-courier', $order), ['courier_id' => $courier->id])
+            ->assertRedirect()
+            ->assertSessionHas('error', 'Jumlah barang melebihi kapasitas kendaraan kurir yang dipilih.');
+
+        $this->assertNull($order->delivery->fresh()->courier_id);
+    }
+
+    public function test_order_detail_only_lists_couriers_matching_zone_and_capacity(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        [, $order] = $this->createOrder();
+        $order->items()->update(['quantity' => 3]);
+        $matchingCourier = Courier::create([
+            'name' => 'Kurir Truck Cocok',
+            'phone' => '081234567897',
+            'vehicle_type' => 'Truck',
+            'service_zone_id' => ServiceZone::query()->where('code', 'WIL-05')->value('id'),
+            'is_available' => true,
+        ]);
+        Courier::create([
+            'name' => 'Kurir Motor Tidak Cukup',
+            'phone' => '081234567898',
+            'vehicle_type' => 'Sepeda motor',
+            'service_zone_id' => ServiceZone::query()->where('code', 'WIL-05')->value('id'),
+            'is_available' => true,
+        ]);
+        Courier::create([
+            'name' => 'Kurir Zona Berbeda',
+            'phone' => '081234567899',
+            'vehicle_type' => 'Truck',
+            'service_zone_id' => ServiceZone::query()->where('code', 'WIL-04')->value('id'),
+            'is_available' => true,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.orders.show', $order))
+            ->assertOk()
+            ->assertSee($matchingCourier->name)
+            ->assertDontSee('Kurir Motor Tidak Cukup')
+            ->assertDontSee('Kurir Zona Berbeda');
     }
 
     public function test_cod_payment_cannot_be_marked_paid_before_delivery(): void
@@ -162,7 +240,7 @@ class OrderManagementTest extends TestCase
     }
 
     /**
-     * @param array<string, mixed> $orderAttributes
+     * @param  array<string, mixed>  $orderAttributes
      * @return array{User, Order}
      */
     private function createOrder(array $orderAttributes = []): array
@@ -172,6 +250,7 @@ class OrderManagementTest extends TestCase
             'user_id' => $customer->id,
             'label' => 'Rumah',
             'full_address' => 'Jl. Gunung Anyar No. 10, Surabaya',
+            'service_zone_id' => ServiceZone::query()->where('code', 'WIL-05')->value('id'),
             'is_primary' => true,
         ]);
         $category = Category::firstOrCreate(['slug' => 'air-galon'], [
@@ -180,7 +259,7 @@ class OrderManagementTest extends TestCase
         $product = Product::create([
             'category_id' => $category->id,
             'name' => 'Galon Aqua',
-            'slug' => 'galon-aqua-' . $customer->id,
+            'slug' => 'galon-aqua-'.$customer->id,
             'price' => 21000,
             'stock' => 8,
             'unit' => 'galon',

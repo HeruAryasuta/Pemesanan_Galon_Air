@@ -33,7 +33,12 @@
                 </div>
             @endif
             <label for="product-image" class="mt-4 block text-xs font-semibold text-slate-700">Unggah gambar (JPEG, PNG, WebP; maks. 2 MB)</label>
-            <input id="product-image" name="image" type="file" accept="image/jpeg,image/png,image/webp" class="mt-2 block w-full rounded-lg border border-[#dce4f5] bg-white text-xs text-slate-600 file:mr-4 file:border-0 file:bg-[#edf2ff] file:px-4 file:py-2.5 file:text-xs file:font-bold file:text-[#31569e]">
+            <input id="product-image" name="image" type="file" accept="image/jpeg,image/png,image/webp" data-product-image-input class="mt-2 block w-full rounded-lg border border-[#dce4f5] bg-white text-xs text-slate-600 file:mr-4 file:border-0 file:bg-[#edf2ff] file:px-4 file:py-2.5 file:text-xs file:font-bold file:text-[#31569e]">
+            <p class="mt-1 text-[10px] leading-4 text-slate-500">Untuk gambar dari browser, unduh/simpan gambarnya ke perangkat terlebih dahulu, lalu pilih file di sini.</p>
+            <div data-product-image-preview-container class="mt-3 hidden items-center gap-3 rounded-lg bg-slate-50 p-2.5">
+                <img data-product-image-preview alt="Pratinjau gambar produk baru" class="h-16 w-20 rounded-md border border-[#e6ebf5] bg-white object-contain p-1">
+                <p data-product-image-preview-name class="text-xs font-semibold text-emerald-700" role="status" aria-live="polite"></p>
+            </div>
             @error('image')<p class="mt-1 text-xs text-rose-700">{{ $message }}</p>@enderror
         </section>
     </div>

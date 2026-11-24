@@ -4,6 +4,7 @@ namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
 use App\Models\Address;
+use App\Models\ServiceZone;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -13,9 +14,10 @@ class AddressController extends Controller
 {
     public function index(Request $request): View
     {
-        $addresses = $request->user()->addresses;
+        $addresses = $request->user()->addresses()->where('is_saved', true)->get();
+        $serviceZones = ServiceZone::orderBy('id')->get();
 
-        return view('user.addresses.index', compact('addresses'));
+        return view('user.addresses.index', compact('addresses', 'serviceZones'));
     }
 
     public function store(Request $request): RedirectResponse
@@ -82,6 +84,7 @@ class AddressController extends Controller
         return $request->validate([
             'label' => ['nullable', 'string', 'max:100'],
             'full_address' => ['required', 'string', 'max:1000'],
+            'service_zone_id' => ['required', 'exists:service_zones,id'],
             'latitude' => ['nullable', 'required_with:longitude', 'numeric', 'between:-90,90'],
             'longitude' => ['nullable', 'required_with:latitude', 'numeric', 'between:-180,180'],
             'is_primary' => ['boolean'],

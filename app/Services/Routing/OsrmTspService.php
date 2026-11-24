@@ -20,10 +20,14 @@ class OsrmTspService
      *     geometry: array<int, array{0: float, 1: float}>
      * }
      */
-    public function routeFromLocation(float $originLatitude, float $originLongitude, Delivery $delivery): array
+    public function routeFromDepot(Delivery $delivery): array
     {
-        if ($originLatitude < -90 || $originLatitude > 90 || $originLongitude < -180 || $originLongitude > 180) {
-            throw new RouteOptimizationException('Lokasi kurir tidak valid.');
+        $depotLatitude = filter_var(config('routing.depot.latitude'), FILTER_VALIDATE_FLOAT);
+        $depotLongitude = filter_var(config('routing.depot.longitude'), FILTER_VALIDATE_FLOAT);
+        if ($depotLatitude === false || $depotLongitude === false
+            || $depotLatitude < -90 || $depotLatitude > 90
+            || $depotLongitude < -180 || $depotLongitude > 180) {
+            throw new RouteOptimizationException('Koordinat depo belum dikonfigurasi dengan benar.');
         }
 
         $address = $delivery->order->address;
@@ -34,7 +38,7 @@ class OsrmTspService
         $destinationLatitude = (float) $address->latitude;
         $destinationLongitude = (float) $address->longitude;
         $coordinates = [
-            [$originLongitude, $originLatitude],
+            [(float) $depotLongitude, (float) $depotLatitude],
             [$destinationLongitude, $destinationLatitude],
         ];
         $baseUrl = rtrim((string) config('services.osrm.url'), '/');
@@ -49,7 +53,7 @@ class OsrmTspService
         ]);
         $roadRoute = $route['routes'][0] ?? null;
         if (($route['code'] ?? null) !== 'Ok' || ! is_array($roadRoute)) {
-            throw new RouteOptimizationException('OSRM tidak menemukan rute jalan dari lokasi kurir ke alamat tujuan.');
+            throw new RouteOptimizationException('OSRM tidak menemukan rute jalan dari depo ke alamat tujuan.');
         }
 
         $geometry = $roadRoute['geometry']['coordinates'] ?? null;
@@ -85,6 +89,8 @@ class OsrmTspService
      *     segments: array<int, array{distance_meters: int, duration_seconds: int}>,
      *     distance_meters: int,
      *     duration_seconds: int,
+     *     manual_distance_meters: int|null,
+     *     optimized_distance_meters: int,
      *     geometry: array<int, array{0: float, 1: float}>
      * }
      */
@@ -128,13 +134,17 @@ class OsrmTspService
             throw new RouteOptimizationException('OSRM tidak dapat menghitung matriks jarak jalan untuk titik yang dipilih.');
         }
 
+        $manualOrder = range(1, count($deliveries));
+        $manualDistance = $this->cycleDistance($distanceMatrix, $manualOrder);
         $deliveryOrder = count($deliveries) <= self::EXACT_TSP_DELIVERY_LIMIT
             ? $this->exactShortestPath($distanceMatrix)
-            : $this->heuristicShortestPath($distanceMatrix);
+            : $this->heuristicShortestPath($distanceMatrix, $manualOrder);
+        $optimizedDistance = $this->cycleDistance($distanceMatrix, $deliveryOrder);
 
         $orderedCoordinates = array_merge(
             [$coordinates[0]],
             array_map(fn (int $index): array => $coordinates[$index], $deliveryOrder),
+            [$coordinates[0]],
         );
         $route = $this->request($baseUrl.'/route/v1/driving/'.$this->coordinatePath($orderedCoordinates), [
             'overview' => 'full',
@@ -148,7 +158,7 @@ class OsrmTspService
         }
 
         $legs = $roadRoute['legs'] ?? null;
-        if (! is_array($legs) || count($legs) !== count($deliveries)
+        if (! is_array($legs) || count($legs) !== count($deliveries) + 1
             || ! is_numeric($roadRoute['distance'] ?? null) || ! is_numeric($roadRoute['duration'] ?? null)
             || $roadRoute['distance'] < 0 || $roadRoute['duration'] < 0) {
             throw new RouteOptimizationException('OSRM tidak mengembalikan jarak atau durasi untuk setiap segmen rute.');
@@ -189,6 +199,8 @@ class OsrmTspService
             'segments' => $segments,
             'distance_meters' => (int) round($roadRoute['distance']),
             'duration_seconds' => (int) round($roadRoute['duration']),
+            'manual_distance_meters' => is_finite($manualDistance) ? (int) round($manualDistance) : null,
+            'optimized_distance_meters' => (int) round($optimizedDistance),
             'geometry' => array_map(
                 fn (array $coordinate): array => [(float) $coordinate[0], (float) $coordinate[1]],
                 $geometry,
@@ -254,7 +266,7 @@ class OsrmTspService
     }
 
     /**
-     * Held-Karp dynamic programming, returning delivery indices with depot fixed at index zero.
+     * Held-Karp dynamic programming for a shortest cycle with the depot fixed at index zero.
      *
      * @param  array<int, array<int, float|null>>  $distanceMatrix
      * @return array<int, int>
@@ -298,14 +310,15 @@ class OsrmTspService
         $lastDelivery = null;
         $shortestDistance = INF;
         foreach ($costs[$fullMask] as $delivery => $distance) {
-            if ($distance < $shortestDistance) {
-                $shortestDistance = $distance;
+            $returnDistance = $distanceMatrix[$delivery + 1][0];
+            if ($returnDistance !== null && $distance + $returnDistance < $shortestDistance) {
+                $shortestDistance = $distance + $returnDistance;
                 $lastDelivery = $delivery;
             }
         }
 
         if ($lastDelivery === null) {
-            throw new RouteOptimizationException('OSRM tidak menemukan jalur yang menghubungkan semua titik pengantaran.');
+            throw new RouteOptimizationException('OSRM tidak menemukan rute pulang-pergi yang menghubungkan depo dan semua titik pengantaran.');
         }
 
         $order = [];
@@ -326,7 +339,7 @@ class OsrmTspService
      * @param  array<int, array<int, float|null>>  $distanceMatrix
      * @return array<int, int>
      */
-    private function heuristicShortestPath(array $distanceMatrix): array
+    private function heuristicShortestPath(array $distanceMatrix, array $manualOrder): array
     {
         $deliveryCount = count($distanceMatrix) - 1;
         $remaining = range(1, $deliveryCount);
@@ -353,24 +366,9 @@ class OsrmTspService
             $remaining = array_values(array_diff($remaining, [$nearest]));
         }
 
-        $pathDistance = function (array $path) use ($distanceMatrix): float {
-            $totalDistance = 0.0;
-            $previous = 0;
-            foreach ($path as $delivery) {
-                $distance = $distanceMatrix[$previous][$delivery];
-                if ($distance === null) {
-                    return INF;
-                }
-                $totalDistance += $distance;
-                $previous = $delivery;
-            }
-
-            return $totalDistance;
-        };
-
         for ($pass = 0; $pass < 20; $pass++) {
             $improved = false;
-            $currentDistance = $pathDistance($order);
+            $currentDistance = $this->cycleDistance($distanceMatrix, $order);
 
             for ($start = 0; $start < $deliveryCount - 1 && ! $improved; $start++) {
                 for ($end = $start + 1; $end < $deliveryCount; $end++) {
@@ -378,7 +376,7 @@ class OsrmTspService
                     $reversed = array_reverse(array_slice($candidate, $start, $end - $start + 1));
                     array_splice($candidate, $start, count($reversed), $reversed);
 
-                    if ($pathDistance($candidate) < $currentDistance) {
+                    if ($this->cycleDistance($distanceMatrix, $candidate) < $currentDistance) {
                         $order = $candidate;
                         $improved = true;
                         break;
@@ -391,6 +389,35 @@ class OsrmTspService
             }
         }
 
-        return $order;
+        $optimizedDistance = $this->cycleDistance($distanceMatrix, $order);
+        if (! is_finite($optimizedDistance)) {
+            throw new RouteOptimizationException('OSRM tidak menemukan rute pulang-pergi yang menghubungkan depo dan semua titik pengantaran.');
+        }
+
+        return $this->cycleDistance($distanceMatrix, $manualOrder) < $optimizedDistance
+            ? $manualOrder
+            : $order;
+    }
+
+    /**
+     * @param  array<int, array<int, float|null>>  $distanceMatrix
+     * @param  array<int, int>  $order
+     */
+    private function cycleDistance(array $distanceMatrix, array $order): float
+    {
+        $distance = 0.0;
+        $previous = 0;
+        foreach ($order as $delivery) {
+            $segment = $distanceMatrix[$previous][$delivery];
+            if ($segment === null) {
+                return INF;
+            }
+            $distance += $segment;
+            $previous = $delivery;
+        }
+
+        $returnDistance = $distanceMatrix[$previous][0];
+
+        return $returnDistance === null ? INF : $distance + $returnDistance;
     }
 }

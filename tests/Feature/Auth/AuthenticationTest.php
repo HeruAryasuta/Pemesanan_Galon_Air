@@ -46,7 +46,7 @@ class AuthenticationTest extends TestCase
 
     public function test_courier_login_redirects_to_courier_portal(): void
     {
-        $account = User::factory()->create(['role' => 'courier']);
+        $account = User::factory()->create(['role' => 'courier', 'username' => 'budi01pwd']);
         $account->courier()->create([
             'name' => $account->name,
             'phone' => '081234567890',
@@ -54,7 +54,7 @@ class AuthenticationTest extends TestCase
         ]);
 
         $this->post('/login', [
-            'email' => $account->email,
+            'email' => 'budi01pwd',
             'password' => 'password',
         ])->assertRedirect(route('courier.dashboard'));
     }

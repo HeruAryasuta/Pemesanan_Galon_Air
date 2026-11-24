@@ -22,6 +22,7 @@
                 ['route' => 'admin.products.*', 'label' => 'Produk', 'url' => route('admin.products.index')],
                 ['route' => 'admin.customers.*', 'label' => 'Pelanggan', 'url' => route('admin.customers.index')],
                 ['route' => 'admin.couriers.*', 'label' => 'Kurir', 'url' => route('admin.couriers.index')],
+                ['route' => 'admin.courier-applications.*', 'label' => 'Pengajuan Kurir', 'url' => route('admin.courier-applications.index')],
                 ['route' => 'admin.routes.*', 'label' => 'Optimasi Rute', 'url' => route('admin.routes.optimize')],
                 ['route' => 'admin.reports.*', 'label' => 'Laporan', 'url' => route('admin.reports.index')],
             ])

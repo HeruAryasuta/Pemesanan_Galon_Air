@@ -9,14 +9,23 @@
         <p class="mt-1 text-sm text-slate-500">Pantau pesanan, pendapatan yang sudah diterima, dan produk terlaris.</p>
     </div>
 
-    <form method="GET" action="{{ route('admin.reports.index') }}" class="mb-5 grid gap-3 rounded-xl border border-[#e6ebf5] bg-white p-4 shadow-sm sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+    <form method="GET" action="{{ route('admin.reports.index') }}" class="mb-5 grid gap-3 rounded-xl border border-[#e6ebf5] bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end">
         <div>
-            <label for="report-from" class="mb-1.5 block text-xs font-semibold text-slate-700">Dari tanggal</label>
-            <input id="report-from" type="date" name="from" value="{{ $from->toDateString() }}" required class="w-full rounded-lg border-[#dce4f5] text-xs focus:border-[#31569e] focus:ring-[#31569e]">
+            <label for="report-period" class="mb-1.5 block text-xs font-semibold text-slate-700">Rentang waktu laporan</label>
+            <select id="report-period" name="period" class="w-full rounded-lg border-[#dce4f5] text-xs focus:border-[#31569e] focus:ring-[#31569e]">
+                <option value="weekly" @selected($period === 'weekly')>Mingguan (7 hari terakhir)</option>
+                <option value="monthly" @selected($period === 'monthly')>Bulanan</option>
+                <option value="yearly" @selected($period === 'yearly')>Tahunan</option>
+                <option value="custom" @selected($period === 'custom')>Custom tanggal</option>
+            </select>
         </div>
         <div>
-            <label for="report-to" class="mb-1.5 block text-xs font-semibold text-slate-700">Sampai tanggal</label>
-            <input id="report-to" type="date" name="to" value="{{ $to->toDateString() }}" required class="w-full rounded-lg border-[#dce4f5] text-xs focus:border-[#31569e] focus:ring-[#31569e]">
+            <label for="report-from" class="mb-1.5 block text-xs font-semibold text-slate-700">Dari tanggal (untuk custom)</label>
+            <input id="report-from" type="date" name="from" value="{{ $from->toDateString() }}" @required($period === 'custom') class="w-full rounded-lg border-[#dce4f5] text-xs focus:border-[#31569e] focus:ring-[#31569e]">
+        </div>
+        <div>
+            <label for="report-to" class="mb-1.5 block text-xs font-semibold text-slate-700">Sampai tanggal (untuk custom)</label>
+            <input id="report-to" type="date" name="to" value="{{ $to->toDateString() }}" @required($period === 'custom') class="w-full rounded-lg border-[#dce4f5] text-xs focus:border-[#31569e] focus:ring-[#31569e]">
         </div>
         <button class="min-h-9 rounded-lg bg-[#12377f] px-4 text-xs font-bold text-white hover:bg-[#09296d]">Tampilkan laporan</button>
     </form>

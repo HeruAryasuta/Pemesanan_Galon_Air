@@ -2,10 +2,13 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class ExampleTest extends TestCase
 {
+    use RefreshDatabase;
+
     /**
      * A basic test example.
      */
@@ -26,8 +29,9 @@ class ExampleTest extends TestCase
             ->assertSee('Rekomendasi')
             ->assertSee('Cara Pesan')
             ->assertSee('Tentang Kami')
+            ->assertSee('Daftar jadi kurir')
             ->assertSee('aria-current="page"', false)
-            ->assertSee('href="' . route('user.products.index') . '"', false)
+            ->assertSee('href="'.route('user.products.index').'"', false)
             ->assertSee('Air Galon')
             ->assertSee('LPG')
             ->assertSee('Air Mineral')
@@ -41,6 +45,6 @@ class ExampleTest extends TestCase
             ->assertSee('images/how-to/add-to-cart.svg', false)
             ->assertSee('images/how-to/checkout-order.svg', false)
             ->assertSee('images/how-to/track-delivery.svg', false)
-            ->assertSee('href="' . route('user.home') . '#cara-pesan"', false);
+            ->assertSee('href="'.route('user.home').'#cara-pesan"', false);
     }
 }

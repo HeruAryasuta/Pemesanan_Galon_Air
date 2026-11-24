@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Address;
+use App\Models\ServiceZone;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -46,10 +47,15 @@ class AddressManagementTest extends TestCase
 
     public function test_customer_can_reverse_geocode_a_selected_address_point(): void
     {
+        $serviceZone = ServiceZone::where('code', 'WIL-04')->firstOrFail();
+
         Http::fake([
             'https://nominatim.openstreetmap.org/reverse*' => Http::response([
                 'name' => 'Toko Contoh',
                 'display_name' => 'Toko Contoh, Jalan Rungkut, Surabaya, Jawa Timur, Indonesia',
+                'address' => [
+                    'city_district' => 'Rungkut',
+                ],
             ]),
         ]);
 
@@ -62,12 +68,35 @@ class AddressManagementTest extends TestCase
             ->assertJson([
                 'full_address' => 'Toko Contoh, Jalan Rungkut, Surabaya, Jawa Timur, Indonesia',
                 'label' => 'Toko Contoh',
+                'service_zone_id' => $serviceZone->id,
             ]);
 
         Http::assertSent(fn ($request): bool => str_starts_with($request->url(), 'https://nominatim.openstreetmap.org/reverse')
             && $request->hasHeader('User-Agent', 'PadmatirtaWisesaDepo/1.0')
             && (float) $request['lat'] === -7.3181234
             && (float) $request['lon'] === 112.7681234);
+    }
+
+    public function test_reverse_geocoding_leaves_service_zone_unselected_for_unknown_areas(): void
+    {
+        Http::fake([
+            'https://nominatim.openstreetmap.org/reverse*' => Http::response([
+                'display_name' => 'Jalan Contoh, Surabaya, Jawa Timur, Indonesia',
+                'address' => [
+                    'city_district' => 'Pusat Kota',
+                ],
+            ]),
+        ]);
+
+        $this->actingAs(User::factory()->create())
+            ->postJson(route('user.addresses.reverse-geocode'), [
+                'latitude' => '-7.2500000',
+                'longitude' => '112.7500000',
+            ])
+            ->assertOk()
+            ->assertJson([
+                'service_zone_id' => null,
+            ]);
     }
 
     public function test_reverse_geocoding_rejects_invalid_coordinates(): void
@@ -101,6 +130,7 @@ class AddressManagementTest extends TestCase
             ->post(route('user.addresses.store'), [
                 'label' => 'Rumah',
                 'full_address' => 'Jl. Gunung Anyar No. 10, Surabaya',
+                'service_zone_id' => $this->gunungAnyarZoneId(),
                 'is_primary' => '1',
             ])
             ->assertRedirect()
@@ -113,6 +143,7 @@ class AddressManagementTest extends TestCase
         $this->put(route('user.addresses.update', $address), [
             'label' => 'Rumah Baru',
             'full_address' => 'Jl. Rungkut No. 20, Surabaya',
+            'service_zone_id' => $this->gunungAnyarZoneId(),
             'is_primary' => '0',
         ])
             ->assertRedirect()
@@ -141,6 +172,7 @@ class AddressManagementTest extends TestCase
             ->put(route('user.addresses.update', $address), [
                 'label' => 'Rumah',
                 'full_address' => $address->full_address,
+                'service_zone_id' => $this->gunungAnyarZoneId(),
                 'latitude' => '-7.3181234',
                 'longitude' => '112.7681234',
                 'is_primary' => '1',
@@ -158,6 +190,7 @@ class AddressManagementTest extends TestCase
             ->post(route('user.addresses.store'), [
                 'label' => 'Kantor',
                 'full_address' => 'Jl. Rungkut No. 20, Surabaya',
+                'service_zone_id' => $this->gunungAnyarZoneId(),
                 'latitude' => '-7.3200000',
                 'longitude' => '112.7700000',
             ])
@@ -224,5 +257,10 @@ class AddressManagementTest extends TestCase
             ->assertSessionHas('success', 'Alamat berhasil dihapus.');
 
         $this->assertDatabaseMissing('addresses', ['id' => $address->id]);
+    }
+
+    private function gunungAnyarZoneId(): int
+    {
+        return (int) ServiceZone::query()->where('code', 'WIL-05')->value('id');
     }
 }

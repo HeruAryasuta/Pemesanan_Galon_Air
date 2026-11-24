@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\CourierApplicationController;
 use App\Http\Controllers\User\{
     HomeController,
     ProductController,
@@ -55,6 +56,11 @@ Route::name('user.')->group(function () {
     Route::delete('/cart/{productId}', [CartController::class, 'destroy'])->name('cart.destroy');
 });
 
+Route::get('/courier-application', [CourierApplicationController::class, 'create'])->name('courier-applications.create');
+Route::post('/courier-application', [CourierApplicationController::class, 'store'])
+    ->middleware('throttle:5,1')
+    ->name('courier-applications.store');
+
 // ===== USER (wajib login) =====
 Route::middleware('auth')->name('user.')->group(function () {
     Route::get('/checkout', [CheckoutController::class, 'index'])->name('checkout.index');
@@ -78,9 +84,9 @@ Route::prefix('courier')->name('courier.')->middleware(['auth', 'courier'])->gro
     Route::get('/', [\App\Http\Controllers\Courier\DeliveryController::class, 'index'])->name('dashboard');
     Route::get('/history', [\App\Http\Controllers\Courier\DeliveryController::class, 'history'])->name('history');
     Route::get('/deliveries/{delivery}', [\App\Http\Controllers\Courier\DeliveryController::class, 'show'])->name('deliveries.show');
-    Route::post('/deliveries/{delivery}/route-from-location', [\App\Http\Controllers\Courier\DeliveryController::class, 'routeFromCurrentLocation'])
+    Route::post('/deliveries/{delivery}/route-from-depot', [\App\Http\Controllers\Courier\DeliveryController::class, 'routeFromDepot'])
         ->middleware('throttle:10,1')
-        ->name('deliveries.route-from-location');
+        ->name('deliveries.route-from-depot');
     Route::patch('/deliveries/{delivery}/status', [\App\Http\Controllers\Courier\DeliveryController::class, 'updateStatus'])->name('deliveries.status');
 });
 
@@ -99,6 +105,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(fun
     Route::post('/orders/{order}/review-payment', [PaymentVerificationController::class, 'review'])->name('orders.review-payment');
 
     Route::resource('couriers', CourierController::class)->except(['show']);
+    Route::post('couriers/zones/{serviceZone}/add-slot', [CourierController::class, 'addServiceZoneSlot'])->name('couriers.zones.add-slot');
+    Route::get('/courier-applications', [CourierApplicationController::class, 'index'])->name('courier-applications.index');
+    Route::post('/courier-applications/{courierApplication}/approve', [CourierApplicationController::class, 'approve'])->name('courier-applications.approve');
+    Route::post('/courier-applications/{courierApplication}/reject', [CourierApplicationController::class, 'reject'])->name('courier-applications.reject');
 
     Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
     Route::get('/customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');

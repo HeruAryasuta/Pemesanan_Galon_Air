@@ -47,6 +47,7 @@
                     <div>
                         <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Alamat</p>
                         <p class="mt-1 text-xs leading-5 text-slate-700">{{ $order->address->label ?: 'Alamat pengantaran' }} — {{ $order->address->full_address }}</p>
+                        <p class="mt-1 text-[10px] font-semibold text-[#31569e]">{{ $order->address->serviceZone?->name }}{{ $order->address->serviceZone ? ' · '.$order->address->serviceZone->area_description : ' · Wilayah belum dipilih' }}</p>
                     </div>
                 </div>
                 @if ($order->notes)
@@ -92,14 +93,15 @@
                     <form method="POST" action="{{ route('admin.orders.assign-courier', $order) }}" class="mt-4 space-y-3">
                         @csrf
                         <label for="courier-id" class="block text-xs font-semibold text-slate-600">Kurir tersedia</label>
+                        <p class="text-[10px] leading-4 text-slate-500">Muatan pesanan {{ $orderLoad }} {{ config('courier.capacity_unit') }}. Pilihan hanya menampilkan kurir dari wilayah yang sesuai dan cukup kapasitas.</p>
                         <select id="courier-id" name="courier_id" required class="w-full rounded-lg border-[#dce4f5] text-sm focus:border-[#31569e] focus:ring-[#31569e]">
                             <option value="">Pilih kurir</option>
                             @foreach ($couriers as $courier)
-                                <option value="{{ $courier->id }}" @selected($order->delivery->courier_id === $courier->id)>{{ $courier->name }}{{ $courier->vehicle_type ? ' · ' . $courier->vehicle_type : '' }}</option>
+                                <option value="{{ $courier->id }}" @selected($order->delivery->courier_id === $courier->id)>{{ $courier->name }} · {{ $courier->vehicle_type }} (kapasitas {{ config('courier.vehicle_capacities.'.$courier->vehicle_type, 0) }})</option>
                             @endforeach
                         </select>
                         @if ($couriers->isEmpty())
-                            <p class="text-xs text-amber-700">Belum ada kurir tersedia.</p>
+                            <p class="text-xs text-amber-700">{{ $order->address->service_zone_id ? 'Belum ada kurir tersedia di wilayah ini dengan kapasitas yang mencukupi.' : 'Alamat belum memiliki wilayah pengantaran. Minta pelanggan memilih wilayah pada alamatnya.' }}</p>
                         @endif
                         <button @disabled($couriers->isEmpty()) class="w-full rounded-lg border border-[#dce4f5] px-4 py-2.5 text-xs font-bold text-[#31569e] hover:bg-[#edf2ff] disabled:cursor-not-allowed disabled:opacity-50">Simpan kurir</button>
                     </form>

@@ -9,6 +9,7 @@ use App\Models\Delivery;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Route as DeliveryRoute;
+use App\Models\ServiceZone;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
@@ -51,6 +52,7 @@ class RouteOptimizationTest extends TestCase
             ->get(route('admin.routes.optimize', [
                 'courier_id' => $courier->id,
                 'route_date' => '2026-10-02',
+                'service_zone_id' => $this->serviceZoneId(),
                 'delivery_ids' => [$first->id, $farther->id, $nearer->id],
             ]))
             ->assertOk()
@@ -59,23 +61,27 @@ class RouteOptimizationTest extends TestCase
         $response
             ->assertSee('Optimasi Rute')
             ->assertSee('Pratinjau rute')
-            ->assertSee('Rute jalan')
+            ->assertSee('Rute pulang-pergi dari OSRM')
             ->assertSee('Tetapkan ke Kurir')
             ->assertSee('Konfigurasi Rute')
-            ->assertSee('optimasi TSP pada jaringan jalan OSRM')
+            ->assertSee('matriks jarak jalan OSRM')
             ->assertSee('Urutan pengantaran')
             ->assertSee('Optimasi jarak jalan (TSP)')
             ->assertSee('Estimasi waktu jalan');
 
         $response->assertViewHas('routePlan', function ($routePlan) use ($first, $nearer, $farther): bool {
-            return $routePlan->pluck('id')->all() === [$first->id, $nearer->id, $farther->id]
+            return $routePlan->pluck('id')->all() === [$first->id, $farther->id, $nearer->id]
                 && $routePlan[0]->segment_distance_meters === 1000
                 && $routePlan[1]->segment_duration_seconds === 120;
         })->assertViewHas('routeMapPoints', function ($routeMapPoints): bool {
             return $routeMapPoints[0]['label'] === 'D'
                 && $routeMapPoints[0]['latitude'] === 0.0
                 && count($routeMapPoints) === 4;
-        })->assertViewHas('routeGeometry', fn (array $geometry): bool => count($geometry) === 4);
+        })->assertViewHas('routeGeometry', fn (array $geometry): bool => count($geometry) === 5
+            && $geometry[0] === $geometry[4])
+            ->assertViewHas('manualDistanceMeters', 200000)
+            ->assertSee('Perbandingan efisiensi jarak')
+            ->assertSee('Kembali ke depo');
     }
 
     public function test_admin_can_create_route_in_the_previewed_order_and_assign_deliveries(): void
@@ -90,6 +96,7 @@ class RouteOptimizationTest extends TestCase
             ->post(route('admin.routes.store'), [
                 'courier_id' => $courier->id,
                 'route_date' => '2026-10-02',
+                'service_zone_id' => $this->serviceZoneId(),
                 'delivery_ids' => [$first->id, $farther->id, $nearer->id],
             ])
             ->assertRedirect(route('admin.routes.optimize'))
@@ -97,11 +104,12 @@ class RouteOptimizationTest extends TestCase
 
         $route = DeliveryRoute::sole();
         $this->assertSame('2026-10-02', $route->route_date->toDateString());
-        $this->assertSame(3000, $route->total_distance_meters);
-        $this->assertSame(360, $route->total_duration_seconds);
-        $this->assertCount(4, $route->route_geometry);
+        $this->assertSame(4000, $route->total_distance_meters);
+        $this->assertSame(480, $route->total_duration_seconds);
+        $this->assertCount(5, $route->route_geometry);
+        $this->assertSame($route->route_geometry[0], $route->route_geometry[4]);
         $this->assertSame(
-            [$first->id, $nearer->id, $farther->id],
+            [$first->id, $farther->id, $nearer->id],
             $route->stops->pluck('delivery_id')->all(),
         );
         $this->assertSame(1000, $route->stops->first()->distance_from_previous_meters);
@@ -109,6 +117,111 @@ class RouteOptimizationTest extends TestCase
         $this->assertFalse($courier->fresh()->is_available);
         $this->assertSame('assigned', $first->fresh()->status);
         $this->assertSame($courier->id, $farther->fresh()->courier_id);
+    }
+
+    public function test_courier_with_route_on_selected_date_is_disabled_and_another_courier_remains_available(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $occupiedCourier = $this->createCourier();
+        $availableCourier = $this->createCourier();
+        DeliveryRoute::create([
+            'courier_id' => $occupiedCourier->id,
+            'route_date' => '2026-10-02',
+            'status' => 'planned',
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.routes.optimize', [
+                'route_date' => '2026-10-02',
+                'service_zone_id' => $this->serviceZoneId(),
+            ]))
+            ->assertOk()
+            ->assertSee($occupiedCourier->name)
+            ->assertSee('Rute sudah terisi')
+            ->assertViewHas('occupiedCourierIds', [$occupiedCourier->id])
+            ->assertViewHas('availableCourierCount', 1)
+            ->assertViewHas('scheduledRoutes', fn ($routes) => $routes->first()->courier->is($occupiedCourier))
+            ->assertSee('disabled', false);
+    }
+
+    public function test_admin_cannot_assign_a_second_route_to_the_same_courier_on_the_same_date(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $courier = $this->createCourier();
+        DeliveryRoute::create([
+            'courier_id' => $courier->id,
+            'route_date' => '2026-10-02',
+            'status' => 'planned',
+        ]);
+        $delivery = $this->createDelivery(0.0, 0.0);
+
+        $this->actingAs($admin)
+            ->post(route('admin.routes.store'), [
+                'courier_id' => $courier->id,
+                'route_date' => '2026-10-02',
+                'service_zone_id' => $this->serviceZoneId(),
+                'delivery_ids' => [$delivery->id],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('error', 'Kurir tersebut sudah memiliki rute pada tanggal yang dipilih. Pilih kurir lain atau tanggal berbeda.');
+
+        $this->assertDatabaseCount('routes', 1);
+        $this->assertSame('pending', $delivery->fresh()->status);
+    }
+
+    public function test_route_assignment_blocks_total_load_over_courier_capacity(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $courier = Courier::create([
+            'name' => 'Kurir Motor',
+            'phone' => '081234567890',
+            'vehicle_type' => 'Sepeda motor',
+            'service_zone_id' => $this->serviceZoneId(),
+            'is_available' => true,
+        ]);
+        $deliveries = collect(range(1, 3))
+            ->map(fn (): Delivery => $this->createDelivery(0.0, 0.0));
+
+        $this->actingAs($admin)
+            ->post(route('admin.routes.store'), [
+                'courier_id' => $courier->id,
+                'route_date' => '2026-10-02',
+                'service_zone_id' => $this->serviceZoneId(),
+                'delivery_ids' => $deliveries->pluck('id')->all(),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('error', 'Total jumlah barang dalam rute melebihi kapasitas kendaraan kurir.');
+
+        $this->assertDatabaseCount('routes', 0);
+        $this->assertSame(3, Delivery::query()->whereIn('id', $deliveries->pluck('id'))->where('status', 'pending')->count());
+    }
+
+    public function test_assigned_deliveries_are_not_available_for_another_route(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $courier = $this->createCourier();
+        $delivery = $this->createDelivery(0.0, 0.0);
+        $route = DeliveryRoute::create([
+            'courier_id' => $courier->id,
+            'route_date' => '2026-10-02',
+            'status' => 'planned',
+        ]);
+        $route->stops()->create([
+            'delivery_id' => $delivery->id,
+            'visit_order' => 1,
+        ]);
+        $delivery->update(['courier_id' => $courier->id, 'status' => 'assigned']);
+
+        $this->actingAs($admin)
+            ->get(route('admin.routes.optimize'))
+            ->assertOk()
+            ->assertViewHas('deliveries', fn ($deliveries) => $deliveries->isEmpty());
+
+        $this->get(route('admin.routes.optimize', [
+            'service_zone_id' => $this->serviceZoneId(),
+            'delivery_ids' => [$delivery->id],
+        ]))
+            ->assertSessionHasErrors('delivery_ids');
     }
 
     public function test_exact_tsp_finds_a_shorter_road_distance_than_nearest_neighbor(): void
@@ -127,9 +240,12 @@ class RouteOptimizationTest extends TestCase
 
         $this->actingAs($admin)
             ->get(route('admin.routes.optimize', [
+                'service_zone_id' => $this->serviceZoneId(),
                 'delivery_ids' => [$firstNearest->id, $secondNearest->id, $thirdNearest->id],
             ]))
             ->assertOk()
+            ->assertViewHas('manualDistanceMeters', 106)
+            ->assertViewHas('comparisonDistanceMeters', 6)
             ->assertViewHas('routePlan', fn ($routePlan): bool => $routePlan->pluck('id')->all() === [
                 $firstNearest->id,
                 $thirdNearest->id,
@@ -145,6 +261,7 @@ class RouteOptimizationTest extends TestCase
 
         $this->actingAs($admin)
             ->get(route('admin.routes.optimize', [
+                'service_zone_id' => $this->serviceZoneId(),
                 'delivery_ids' => $deliveries->pluck('id')->all(),
             ]))
             ->assertOk()
@@ -152,6 +269,9 @@ class RouteOptimizationTest extends TestCase
                 return $routePlan->count() === $deliveries->count()
                     && $routePlan->pluck('id')->unique()->count() === $deliveries->count()
                     && $routePlan->pluck('id')->diff($deliveries->pluck('id'))->isEmpty();
+            })
+            ->assertViewHas('routeGeometry', function (array $geometry): bool {
+                return count($geometry) >= 2 && $geometry[0] === $geometry[count($geometry) - 1];
             });
     }
 
@@ -166,6 +286,7 @@ class RouteOptimizationTest extends TestCase
         $this->actingAs($admin)
             ->get(route('admin.routes.optimize', [
                 'courier_id' => $courier->id,
+                'service_zone_id' => $this->serviceZoneId(),
                 'delivery_ids' => [$delivery->id],
             ]))
             ->assertOk()
@@ -182,6 +303,7 @@ class RouteOptimizationTest extends TestCase
         $this->actingAs($admin)
             ->get(route('admin.routes.optimize', [
                 'courier_id' => $courier->id,
+                'service_zone_id' => $this->serviceZoneId(),
                 'delivery_ids' => [$delivery->id],
             ]))
             ->assertSessionHasErrors('delivery_ids');
@@ -267,7 +389,8 @@ class RouteOptimizationTest extends TestCase
         return Courier::create([
             'name' => 'Siti Kurir',
             'phone' => '081234567890',
-            'vehicle_type' => 'Sepeda motor',
+            'vehicle_type' => 'Truck',
+            'service_zone_id' => $this->serviceZoneId(),
             'is_available' => true,
         ]);
     }
@@ -279,6 +402,7 @@ class RouteOptimizationTest extends TestCase
             'user_id' => $customer->id,
             'label' => 'Rumah',
             'full_address' => 'Alamat '.$customer->id,
+            'service_zone_id' => $this->serviceZoneId(),
             'latitude' => $latitude,
             'longitude' => $longitude,
         ]);
@@ -309,5 +433,10 @@ class RouteOptimizationTest extends TestCase
             'order_id' => $order->id,
             'status' => 'pending',
         ]);
+    }
+
+    private function serviceZoneId(): int
+    {
+        return (int) ServiceZone::query()->where('code', 'WIL-05')->value('id');
     }
 }

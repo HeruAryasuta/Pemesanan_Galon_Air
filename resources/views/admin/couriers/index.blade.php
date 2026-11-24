@@ -12,6 +12,27 @@
         <a href="{{ route('admin.couriers.create') }}" class="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#12377f] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#09296d]">+ Tambah kurir</a>
     </div>
 
+    <section class="mb-5 rounded-xl border border-[#e6ebf5] bg-white p-4 shadow-sm sm:p-5" aria-label="Slot wilayah kurir">
+        <div class="mb-3">
+            <h2 class="text-sm font-bold text-[#202a3b]">Slot kurir per wilayah</h2>
+            <p class="mt-1 text-[10px] text-slate-500">Wilayah penuh tidak dapat dipilih untuk kurir lain sampai admin menambah slot.</p>
+        </div>
+        <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            @foreach ($serviceZones as $zone)
+                <div class="flex items-center justify-between gap-3 rounded-lg border border-[#edf0f7] px-3 py-2.5">
+                    <div class="min-w-0">
+                        <p class="text-xs font-bold text-[#202a3b]">{{ $zone->name }} · {{ $zone->area_description }}</p>
+                        <p class="mt-0.5 text-[10px] text-slate-500">{{ $zone->couriers_count }} dari {{ $zone->slot_count }} slot terisi</p>
+                    </div>
+                    <form method="POST" action="{{ route('admin.couriers.zones.add-slot', $zone) }}">
+                        @csrf
+                        <button class="shrink-0 rounded-md border border-[#dce4f5] px-2.5 py-1.5 text-[10px] font-bold text-[#31569e] hover:bg-[#edf2ff]">+ Slot</button>
+                    </form>
+                </div>
+            @endforeach
+        </div>
+    </section>
+
     @if ($couriers->isEmpty())
         <section class="rounded-2xl border border-[#e8ecf6] bg-white px-5 py-12 text-center shadow-sm">
             <h2 class="text-base font-bold text-[#202a3b]">Belum ada data kurir</h2>
@@ -31,6 +52,7 @@
                             <th scope="col" class="px-4 py-3">Email login</th>
                             <th scope="col" class="px-4 py-3">Nomor telepon</th>
                             <th scope="col" class="px-4 py-3">Kendaraan</th>
+                            <th scope="col" class="px-4 py-3">Wilayah</th>
                             <th scope="col" class="px-4 py-3">Ketersediaan</th>
                             <th scope="col" class="px-4 py-3 text-right">Aksi</th>
                         </tr>
@@ -39,9 +61,17 @@
                         @foreach ($couriers as $courier)
                             <tr class="text-xs hover:bg-[#fbfcff]">
                                 <td class="px-4 py-3 font-bold text-[#202a3b]">{{ $courier->name }}</td>
-                                <td class="px-4 py-3 text-slate-600">{{ $courier->user?->email ?? 'Belum ada akun' }}</td>
+                                <td class="px-4 py-3 text-slate-600">
+                                    @if ($courier->user)
+                                        <span class="block">{{ $courier->user->email }}</span>
+                                        <span class="mt-1 block text-[10px] font-semibold text-[#31569e]">Username: {{ $courier->user->username ?: 'Belum dibuat' }}</span>
+                                    @else
+                                        Belum ada akun
+                                    @endif
+                                </td>
                                 <td class="whitespace-nowrap px-4 py-3 text-slate-600">{{ $courier->phone }}</td>
                                 <td class="px-4 py-3 text-slate-600">{{ $courier->vehicle_type ?: 'Belum diatur' }}</td>
+                                <td class="px-4 py-3 text-slate-600">{{ $courier->serviceZone?->name }}{{ $courier->serviceZone ? ' · '.$courier->serviceZone->area_description : 'Belum ditetapkan' }}</td>
                                 <td class="px-4 py-3">
                                     @if ($courier->is_available)
                                         <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-[9px] font-bold text-emerald-700">Tersedia</span>

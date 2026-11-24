@@ -42,7 +42,9 @@
                 </div>
             @endif
 
-            <div class="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <form id="place-order-form" method="POST" action="{{ route('user.checkout.store') }}" x-data="{ addressMode: '{{ $addresses->isEmpty() || old('address_id') === 'new' ? 'new' : 'saved' }}' }">
+                @csrf
+                <div class="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
                 <div class="space-y-4">
                     <section class="rounded-2xl border border-[#e8ecf6] bg-white p-4 shadow-[0_4px_14px_rgba(29,48,99,0.04)] sm:p-5" aria-labelledby="delivery-address-title">
                         <div>
@@ -54,44 +56,88 @@
                             <fieldset class="mt-4 space-y-2">
                                 <legend class="sr-only">Pilih alamat pengantaran</legend>
                                 @foreach ($addresses as $address)
-                                    <label for="address-{{ $address->id }}" class="flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition has-[:checked]:border-[#31569e] has-[:checked]:bg-[#f4f7ff]">
-                                        <input
-                                            id="address-{{ $address->id }}"
-                                            type="radio"
-                                            name="address_id"
-                                            value="{{ $address->id }}"
-                                            form="place-order-form"
-                                            required
-                                            @checked((string) old('address_id', $addresses->firstWhere('is_primary', true)?->id ?? $addresses->first()->id) === (string) $address->id)
-                                            class="mt-0.5 h-4 w-4 border-slate-300 text-[#12377f] focus:ring-[#31569e]"
-                                        >
-                                        <span class="min-w-0 flex-1">
-                                            <span class="flex flex-wrap items-center gap-2 text-xs font-bold text-[#202a3b]">
-                                                {{ $address->label ?: 'Alamat pengantaran' }}
-                                                @if ($address->is_primary)
-                                                    <span class="rounded-full bg-[#edf2ff] px-2 py-0.5 text-[8px] font-bold text-[#31569e]">Utama</span>
+                                    <div class="rounded-xl border p-3 transition has-[:checked]:border-[#31569e] has-[:checked]:bg-[#f4f7ff]">
+                                        <label for="address-{{ $address->id }}" class="flex cursor-pointer items-start gap-3">
+                                            <input
+                                                id="address-{{ $address->id }}"
+                                                type="radio"
+                                                name="address_id"
+                                                value="{{ $address->id }}"
+                                                required
+                                                @checked((string) old('address_id', $addresses->firstWhere('is_primary', true)?->id ?? $addresses->first()->id) === (string) $address->id)
+                                                @change="addressMode = 'saved'"
+                                                class="mt-0.5 h-4 w-4 border-slate-300 text-[#12377f] focus:ring-[#31569e]"
+                                            >
+                                            <span class="min-w-0 flex-1">
+                                                <span class="flex flex-wrap items-center gap-2 text-xs font-bold text-[#202a3b]">
+                                                    {{ $address->label ?: 'Alamat pengantaran' }}
+                                                    @if ($address->is_primary)
+                                                        <span class="rounded-full bg-[#edf2ff] px-2 py-0.5 text-[8px] font-bold text-[#31569e]">Utama</span>
+                                                    @endif
+                                                </span>
+                                                <span class="mt-1 block text-[11px] leading-5 text-slate-600">{{ $address->full_address }}</span>
+                                                @if ($address->serviceZone)
+                                                    <span class="mt-1 block text-[10px] font-semibold text-[#4162a5]">
+                                                        Wilayah: {{ $address->serviceZone->name }} · {{ $address->serviceZone->area_description }}
+                                                    </span>
                                                 @endif
                                             </span>
-                                            <span class="mt-1 block text-[11px] leading-5 text-slate-600">{{ $address->full_address }}</span>
-                                        </span>
-                                    </label>
+                                        </label>
+                                        @unless ($address->serviceZone)
+                                            <div class="ml-7 mt-2">
+                                                <label for="checkout-address-zone-{{ $address->id }}" class="mb-1 block text-[10px] font-semibold text-slate-700">Wilayah pengantaran</label>
+                                                <select id="checkout-address-zone-{{ $address->id }}" name="service_zone_ids[{{ $address->id }}]" class="w-full rounded-lg border-[#e0e6f3] px-3 py-2 text-xs focus:border-[#31569e] focus:ring-[#31569e]">
+                                                    <option value="">Pilih wilayah sesuai kecamatan</option>
+                                                    @foreach ($serviceZones as $zone)
+                                                        <option value="{{ $zone->id }}" @selected((string) old('service_zone_ids.'.$address->id, $address->suggested_service_zone_id) === (string) $zone->id)>{{ $zone->name }} · {{ $zone->area_description }}</option>
+                                                    @endforeach
+                                                </select>
+                                                @error('service_zone_ids.'.$address->id)<p class="mt-1 text-[10px] text-rose-700">{{ $message }}</p>@enderror
+                                            </div>
+                                        @endunless
+                                    </div>
                                 @endforeach
                             </fieldset>
                         @else
-                            <p class="mt-4 rounded-xl bg-amber-50 px-3 py-2.5 text-[11px] leading-5 text-amber-800">Tambahkan alamat pengantaran terlebih dahulu agar pesanan dapat dibuat.</p>
+                            <p class="mt-4 rounded-xl bg-amber-50 px-3 py-2.5 text-[11px] leading-5 text-amber-800">Belum ada alamat tersimpan. Isi alamat baru di bawah untuk melanjutkan checkout.</p>
                         @endif
 
-                        <details class="mt-4 rounded-xl border border-[#e8ecf6] bg-[#fbfcff] p-3" @if ($addresses->isEmpty() || $errors->has('full_address') || $errors->has('label')) open @endif>
-                            <summary class="cursor-pointer text-[11px] font-bold text-[#31569e]">Tambah alamat baru</summary>
-                            <form method="POST" action="{{ route('user.addresses.store') }}" class="mt-3 space-y-3">
-                                @csrf
+                        <details class="mt-4 rounded-xl border border-[#e8ecf6] bg-[#fbfcff] p-3" @if ($addresses->isEmpty() || old('address_id') === 'new' || $errors->has('full_address') || $errors->has('label') || $errors->has('service_zone_id')) open @endif>
+                            <summary class="cursor-pointer text-[11px] font-bold text-[#31569e]">Gunakan alamat baru</summary>
+                            <label for="checkout-address-new" class="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-[#e0e6f3] bg-white p-3">
+                                <input
+                                    id="checkout-address-new"
+                                    type="radio"
+                                    name="address_id"
+                                    value="new"
+                                    required
+                                    @checked($addresses->isEmpty() || old('address_id') === 'new')
+                                    @change="addressMode = 'new'"
+                                    class="mt-0.5 h-4 w-4 border-slate-300 text-[#12377f] focus:ring-[#31569e]"
+                                >
+                                <span>
+                                    <span class="block text-xs font-bold text-[#202a3b]">Alamat baru untuk pesanan ini</span>
+                                    <span class="mt-1 block text-[10px] leading-4 text-slate-500">Alamat ini hanya disimpan ke daftar alamat jika Anda memilih opsi simpan.</span>
+                                </span>
+                            </label>
+                            <fieldset class="mt-3 space-y-3" x-bind:disabled="addressMode !== 'new'">
                                 <div>
                                     <label for="new-address-label" class="mb-1 block text-[10px] font-semibold text-slate-700">Label alamat <span class="font-normal text-slate-500">(opsional)</span></label>
                                     <input id="new-address-label" name="label" type="text" value="{{ old('label') }}" maxlength="100" placeholder="Contoh: Rumah" class="w-full rounded-lg border-[#e0e6f3] px-3 py-2 text-xs focus:border-[#31569e] focus:ring-[#31569e]">
                                 </div>
                                 <div>
                                     <label for="new-full-address" class="mb-1 block text-[10px] font-semibold text-slate-700">Alamat lengkap</label>
-                                    <textarea id="new-full-address" name="full_address" rows="3" maxlength="1000" required class="w-full rounded-lg border-[#e0e6f3] px-3 py-2 text-xs focus:border-[#31569e] focus:ring-[#31569e]" placeholder="Jalan, nomor rumah, RT/RW, kelurahan, dan patokan">{{ old('full_address') }}</textarea>
+                                    <textarea id="new-full-address" name="full_address" rows="3" maxlength="1000" x-bind:required="addressMode === 'new'" class="w-full rounded-lg border-[#e0e6f3] px-3 py-2 text-xs focus:border-[#31569e] focus:ring-[#31569e]" placeholder="Jalan, nomor rumah, RT/RW, kelurahan, dan patokan">{{ old('full_address') }}</textarea>
+                                </div>
+                                <div>
+                                    <label for="checkout-new-service-zone" class="mb-1 block text-[10px] font-semibold text-slate-700">Wilayah pengantaran</label>
+                                    <select id="checkout-new-service-zone" name="service_zone_id" x-bind:required="addressMode === 'new'" class="w-full rounded-lg border-[#e0e6f3] px-3 py-2 text-xs focus:border-[#31569e] focus:ring-[#31569e]">
+                                        <option value="">Pilih wilayah sesuai kecamatan</option>
+                                        @foreach ($serviceZones as $zone)
+                                            <option value="{{ $zone->id }}" @selected((string) old('service_zone_id') === (string) $zone->id)>{{ $zone->name }} · {{ $zone->area_description }}</option>
+                                        @endforeach
+                                    </select>
+                                    @error('service_zone_id')<p class="mt-1 text-[10px] text-rose-700">{{ $message }}</p>@enderror
                                 </div>
                                 <x-address-location-picker
                                     id="checkout-new"
@@ -100,10 +146,13 @@
                                 />
                                 <label class="flex cursor-pointer items-center gap-2 text-[10px] font-medium text-slate-600">
                                     <input type="checkbox" name="is_primary" value="1" @checked(old('is_primary')) class="h-4 w-4 rounded border-slate-300 text-[#12377f] focus:ring-[#31569e]">
-                                    Jadikan alamat utama
+                                    Jadikan alamat utama jika disimpan
                                 </label>
-                                <button type="submit" class="inline-flex min-h-9 items-center justify-center rounded-lg border border-[#dce4f5] px-4 py-2 text-[10px] font-bold text-[#31569e] transition hover:bg-[#edf2ff]">Simpan alamat</button>
-                            </form>
+                                <label class="flex cursor-pointer items-center gap-2 text-[10px] font-medium text-slate-600">
+                                    <input type="checkbox" name="save_address" value="1" @checked(old('save_address')) class="h-4 w-4 rounded border-slate-300 text-[#12377f] focus:ring-[#31569e]">
+                                    Simpan alamat ini untuk pesanan berikutnya
+                                </label>
+                            </fieldset>
                         </details>
                     </section>
 
@@ -155,7 +204,7 @@
                     <section class="rounded-2xl border border-[#e8ecf6] bg-white p-4 shadow-[0_4px_14px_rgba(29,48,99,0.04)] sm:p-5" aria-labelledby="order-notes-title">
                         <h2 id="order-notes-title" class="text-sm font-bold text-[#202a3b]">Catatan untuk pesanan</h2>
                         <label for="order-notes" class="mt-3 block text-[10px] font-semibold text-slate-600">Catatan pengantaran <span class="font-normal">(opsional)</span></label>
-                        <textarea id="order-notes" name="notes" form="place-order-form" rows="3" maxlength="500" placeholder="Contoh: titipkan ke satpam jika tidak ada orang di rumah." class="mt-1.5 w-full rounded-lg border-[#e0e6f3] px-3 py-2 text-xs focus:border-[#31569e] focus:ring-[#31569e]">{{ old('notes') }}</textarea>
+                        <textarea id="order-notes" name="notes" rows="3" maxlength="500" placeholder="Contoh: titipkan ke satpam jika tidak ada orang di rumah." class="mt-1.5 w-full rounded-lg border-[#e0e6f3] px-3 py-2 text-xs focus:border-[#31569e] focus:ring-[#31569e]">{{ old('notes') }}</textarea>
                     </section>
                 </div>
 
@@ -188,17 +237,13 @@
                     @if ($cartHasUnavailableItems)
                         <p class="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-[10px] leading-4 text-amber-800" role="status">Ada produk yang stoknya tidak mencukupi atau sudah tidak tersedia. Periksa kembali keranjang Anda.</p>
                         <a href="{{ route('user.cart.index') }}" class="mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-[#dce4f5] px-4 py-2 text-xs font-bold text-[#31569e] hover:bg-[#edf2ff]">Periksa keranjang</a>
-                    @elseif ($addresses->isEmpty())
-                        <button type="button" disabled class="mt-4 inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center rounded-lg bg-slate-300 px-4 py-2 text-xs font-bold text-slate-600">Tambahkan alamat untuk lanjut</button>
                     @else
-                        <form id="place-order-form" method="POST" action="{{ route('user.checkout.store') }}">
-                            @csrf
-                            <button type="submit" class="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-[#12377f] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#09296d] focus:outline-none focus:ring-2 focus:ring-[#31569e] focus:ring-offset-2">Buat pesanan</button>
-                        </form>
+                        <button type="submit" class="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-[#12377f] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#09296d] focus:outline-none focus:ring-2 focus:ring-[#31569e] focus:ring-offset-2">Buat pesanan</button>
                     @endif
                     <p class="mt-3 text-center text-[9px] leading-4 text-slate-500">Pesanan akan tercatat dengan status menunggu konfirmasi.</p>
                 </aside>
-            </div>
+                </div>
+            </form>
         </main>
 
         <footer class="mt-auto border-t border-[#dbe4f7] bg-[#e6edff]">

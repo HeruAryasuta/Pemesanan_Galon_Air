@@ -22,6 +22,7 @@ class ProfileTest extends TestCase
             ->assertSee('Pengaturan akun')
             ->assertSee('Informasi pribadi')
             ->assertSee('Ubah kata sandi')
+        ->assertSee('Kelola alamat')
             ->assertSee('Alamat pengantaran')
             ->assertSee('Riwayat pesanan')
             ->assertSee('Hapus akun permanen');
@@ -35,7 +36,12 @@ class ProfileTest extends TestCase
             ->get('/profile')
             ->assertOk()
             ->assertSee('Buka Panel Admin')
-            ->assertSee(route('admin.dashboard'), false);
+            ->assertSee(route('admin.dashboard'), false)
+            ->assertDontSee('Kelola alamat')
+            ->assertDontSee('Alamat pengantaran')
+            ->assertDontSee('Akses cepat')
+            ->assertDontSee('Kelola kebutuhan akun Anda')
+            ->assertDontSee('Riwayat pesanan');
 
         $this->get(route('user.home'))
             ->assertOk()

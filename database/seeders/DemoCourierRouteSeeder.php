@@ -7,6 +7,7 @@ use App\Models\Delivery;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Route as DeliveryRoute;
+use App\Models\ServiceZone;
 use App\Models\User;
 use App\Services\Routing\OsrmTspService;
 use Illuminate\Database\Seeder;
@@ -32,6 +33,17 @@ class DemoCourierRouteSeeder extends Seeder
             throw new RuntimeException('Akun kurir demo tidak ditemukan. Buat akun kurir demo terlebih dahulu.');
         }
 
+        $serviceZone = ServiceZone::query()->where('code', 'WIL-05')->firstOrFail();
+        if ($courier->service_zone_id === null) {
+            if ($serviceZone->couriers()->count() >= $serviceZone->slot_count) {
+                throw new RuntimeException('Slot Wilayah 5 sudah penuh. Tetapkan kurir demo ke Wilayah 5 atau tambahkan slot wilayah terlebih dahulu.');
+            }
+
+            $courier->update(['service_zone_id' => $serviceZone->id]);
+        } elseif ((int) $courier->service_zone_id !== (int) $serviceZone->id) {
+            throw new RuntimeException('Kurir demo harus ditetapkan pada Wilayah 5 agar sesuai dengan alamat demo.');
+        }
+
         $customer = User::query()->where('email', self::CUSTOMER_EMAIL)->first();
         if ($customer !== null && ($customer->name !== 'Pelanggan Demo Rute' || $customer->role !== 'customer')) {
             throw new RuntimeException('Email pelanggan demo sudah digunakan akun lain; tidak ada data yang diubah.');
@@ -51,11 +63,18 @@ class DemoCourierRouteSeeder extends Seeder
             ['label' => 'Rumah Demo Rute'],
             [
                 'full_address' => 'Jalan Rungkut Menanggal, Gunung Anyar, Surabaya, Jawa Timur',
+                'service_zone_id' => $serviceZone->id,
                 'latitude' => -7.3500,
                 'longitude' => 112.7700,
                 'is_primary' => true,
             ],
         );
+
+        if ($address->service_zone_id === null) {
+            $address->update(['service_zone_id' => $serviceZone->id]);
+        } elseif ((int) $address->service_zone_id !== (int) $serviceZone->id) {
+            throw new RuntimeException('Alamat demo harus ditetapkan pada Wilayah 5.');
+        }
 
         if ($address->latitude === null || $address->longitude === null) {
             throw new RuntimeException('Alamat demo sudah ada tetapi belum mempunyai koordinat.');

@@ -65,6 +65,16 @@
                                     <label for="full-address-{{ $address->id }}" class="mb-1 block text-[10px] font-semibold text-slate-700">Alamat lengkap</label>
                                     <textarea id="full-address-{{ $address->id }}" name="full_address" rows="3" maxlength="1000" required class="w-full rounded-lg border-[#e0e6f3] px-3 py-2 text-xs focus:border-[#31569e] focus:ring-[#31569e]">{{ old('address_id') == $address->id ? old('full_address') : $address->full_address }}</textarea>
                                 </div>
+                                <div>
+                                    <label for="service-zone-{{ $address->id }}" class="mb-1 block text-[10px] font-semibold text-slate-700">Wilayah pengantaran</label>
+                                    <select id="service-zone-{{ $address->id }}" name="service_zone_id" required class="w-full rounded-lg border-[#e0e6f3] px-3 py-2 text-xs focus:border-[#31569e] focus:ring-[#31569e]">
+                                        <option value="">Pilih wilayah sesuai kecamatan</option>
+                                        @foreach ($serviceZones as $zone)
+                                            <option value="{{ $zone->id }}" @selected((string) ($errors->any() && old('address_id') == $address->id ? old('service_zone_id', $address->service_zone_id) : $address->service_zone_id) === (string) $zone->id)>{{ $zone->name }} · {{ $zone->area_description }}</option>
+                                        @endforeach
+                                    </select>
+                                    @error('service_zone_id')<p class="mt-1 text-[10px] text-rose-700">{{ $message }}</p>@enderror
+                                </div>
                                 <x-address-location-picker
                                     id="saved-{{ $address->id }}"
                                     :latitude="old('address_id') == $address->id ? old('latitude') : $address->latitude"
@@ -105,6 +115,16 @@
                         <div>
                             <label for="new-full-address" class="mb-1 block text-[10px] font-semibold text-slate-700">Alamat lengkap</label>
                             <textarea id="new-full-address" name="full_address" rows="4" maxlength="1000" required placeholder="Jalan, nomor rumah, RT/RW, kelurahan, dan patokan" class="w-full rounded-lg border-[#e0e6f3] px-3 py-2 text-xs focus:border-[#31569e] focus:ring-[#31569e]">{{ old('address_id') ? '' : old('full_address') }}</textarea>
+                        </div>
+                        <div>
+                            <label for="new-service-zone" class="mb-1 block text-[10px] font-semibold text-slate-700">Wilayah pengantaran</label>
+                            <select id="new-service-zone" name="service_zone_id" required class="w-full rounded-lg border-[#e0e6f3] px-3 py-2 text-xs focus:border-[#31569e] focus:ring-[#31569e]">
+                                <option value="">Pilih wilayah sesuai kecamatan</option>
+                                @foreach ($serviceZones as $zone)
+                                    <option value="{{ $zone->id }}" @selected(! old('address_id') && (string) old('service_zone_id') === (string) $zone->id)>{{ $zone->name }} · {{ $zone->area_description }}</option>
+                                @endforeach
+                            </select>
+                            @error('service_zone_id')<p class="mt-1 text-[10px] text-rose-700">{{ $message }}</p>@enderror
                         </div>
                         <x-address-location-picker
                             id="new"

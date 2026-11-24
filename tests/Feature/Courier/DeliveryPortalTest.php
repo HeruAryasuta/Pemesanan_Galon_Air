@@ -51,6 +51,10 @@ class DeliveryPortalTest extends TestCase
 
     public function test_courier_can_view_delivery_details_and_start_then_complete_task(): void
     {
+        config([
+            'routing.depot.latitude' => -7.3414987,
+            'routing.depot.longitude' => 112.7677984,
+        ]);
         $courier = $this->createCourier();
         $delivery = $this->createDelivery($courier, 'assigned');
         $delivery->order->address->update([
@@ -65,8 +69,10 @@ class DeliveryPortalTest extends TestCase
             ->assertSee('Jl. Gunung Anyar No. 10, Surabaya')
             ->assertSee('Galon Portal Test')
             ->assertSee('Mulai pengantaran')
-            ->assertSee('Tampilkan rute ke tujuan')
+            ->assertSee('Tampilkan rute dari depo')
             ->assertSee('data-courier-route-map', false)
+            ->assertSee('data-depot-latitude="-7.3414987"', false)
+            ->assertSee('data-depot-longitude="112.7677984"', false)
             ->assertSee('data-destination-latitude="-7.35"', false)
             ->assertSee('data-destination-longitude="112.77"', false);
 
@@ -116,17 +122,37 @@ class DeliveryPortalTest extends TestCase
         ]);
 
         $this->actingAs($courier->user)
-            ->get(route('courier.deliveries.show', $delivery))
+            ->get(route('courier.dashboard'))
+            ->assertOk()
+            ->assertSee('Rute yang ditetapkan')
+            ->assertSee('Rute #'.$route->id)
+            ->assertSee('1 titik')
+            ->assertSee('Jl. Gunung Anyar No. 10, Surabaya')
+            ->assertSee('Pemberhentian 1');
+
+        $this->get(route('courier.deliveries.show', $delivery))
             ->assertOk()
             ->assertSee('data-courier-route-map', false)
-            ->assertSee(route('courier.deliveries.route-from-location', $delivery), false)
-            ->assertSee('Rute dari lokasi kurir')
-            ->assertSee('Urutan rute');
+            ->assertSee(route('courier.deliveries.route-from-depot', $delivery), false)
+            ->assertSee('Rute dari depo')
+            ->assertSee('Rute #'.$route->id)
+            ->assertSee('1,5 km · 5 menit')
+            ->assertSee('Urutan pemberhentian');
+
+        $this->patch(route('courier.deliveries.status', $delivery), ['status' => 'in_transit']);
+        $this->assertSame('in_progress', $route->fresh()->status);
+
+        $this->patch(route('courier.deliveries.status', $delivery), ['status' => 'delivered']);
+        $this->assertSame('completed', $route->fresh()->status);
     }
 
-    public function test_courier_can_request_a_road_route_from_current_location_to_their_delivery(): void
+    public function test_courier_can_request_a_road_route_from_the_depot_to_their_delivery(): void
     {
-        config(['services.osrm.url' => 'http://osrm.test']);
+        config([
+            'services.osrm.url' => 'http://osrm.test',
+            'routing.depot.latitude' => -7.32,
+            'routing.depot.longitude' => 112.75,
+        ]);
         Http::fake([
             'http://osrm.test/route/v1/driving/*' => function (HttpRequest $request) {
                 $legCount = 1;
@@ -154,10 +180,7 @@ class DeliveryPortalTest extends TestCase
         ]);
 
         $this->actingAs($courier->user)
-            ->postJson(route('courier.deliveries.route-from-location', $delivery), [
-                'latitude' => -7.32,
-                'longitude' => 112.75,
-            ])
+            ->postJson(route('courier.deliveries.route-from-depot', $delivery), [])
             ->assertOk()
             ->assertJsonPath('distance_meters', 2345)
             ->assertJsonPath('duration_seconds', 456)
@@ -195,7 +218,7 @@ class DeliveryPortalTest extends TestCase
             ->get(route('courier.deliveries.show', $delivery))
             ->assertNotFound();
 
-        $this->postJson(route('courier.deliveries.route-from-location', $delivery), [
+        $this->postJson(route('courier.deliveries.route-from-depot', $delivery), [
             'latitude' => -7.32,
             'longitude' => 112.75,
         ])->assertNotFound();

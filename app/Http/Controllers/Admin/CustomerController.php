@@ -15,7 +15,7 @@ class CustomerController extends Controller
             ->where('role', 'customer')
             ->withCount('orders')
             ->when($request->filled('search'), function ($query) use ($request): void {
-                $search = '%' . $request->string('search') . '%';
+                $search = '%'.$request->string('search').'%';
 
                 $query->where(function ($customerQuery) use ($search): void {
                     $customerQuery
@@ -35,7 +35,7 @@ class CustomerController extends Controller
         abort_if($customer->role !== 'customer', 404);
 
         $customer->loadCount('orders')->load([
-            'addresses' => fn ($query) => $query->orderByDesc('is_primary')->latest(),
+            'addresses' => fn ($query) => $query->where('is_saved', true)->orderByDesc('is_primary')->latest(),
             'orders' => fn ($query) => $query->with('address')->latest()->take(10),
         ]);
 

@@ -10,7 +10,9 @@ class Courier extends Model
         'user_id',
         'name',
         'phone',
+        'nik',
         'vehicle_type',
+        'service_zone_id',
         'is_available',
     ];
 
@@ -18,6 +20,8 @@ class Courier extends Model
     {
         return [
             'is_available' => 'boolean',
+            'nik' => 'encrypted',
+            'service_zone_id' => 'integer',
         ];
     }
 
@@ -34,5 +38,10 @@ class Courier extends Model
     public function routes()
     {
         return $this->hasMany(Route::class);
+    }
+
+    public function serviceZone()
+    {
+        return $this->belongsTo(ServiceZone::class);
     }
 }

@@ -10,9 +10,11 @@ class Address extends Model
         'user_id',
         'label',
         'full_address',
+        'service_zone_id',
         'latitude',
         'longitude',
         'is_primary',
+        'is_saved',
     ];
 
     protected function casts(): array
@@ -21,6 +23,8 @@ class Address extends Model
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
             'is_primary' => 'boolean',
+            'is_saved' => 'boolean',
+            'service_zone_id' => 'integer',
         ];
     }
 
@@ -32,5 +36,10 @@ class Address extends Model
     public function orders()
     {
         return $this->hasMany(Order::class);
+    }
+
+    public function serviceZone()
+    {
+        return $this->belongsTo(ServiceZone::class);
     }
 }

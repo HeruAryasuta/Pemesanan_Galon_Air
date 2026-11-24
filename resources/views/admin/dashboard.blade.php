@@ -63,15 +63,35 @@
 
     <div class="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(270px,0.8fr)]">
         <section class="rounded-xl border border-[#e6ebf5] bg-white p-4 shadow-[0_4px_16px_rgba(36,57,110,0.05)] sm:p-5" aria-labelledby="weekly-orders-title">
-            <div class="flex items-start justify-between gap-3">
+            <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <h2 id="weekly-orders-title" class="text-sm font-bold text-[#202a3b]">Tren Pesanan (7 Hari)</h2>
+                    <h2 id="weekly-orders-title" class="text-sm font-bold text-[#202a3b]">{{ $trendTitle }}</h2>
                     <p class="mt-1 text-[10px] text-slate-500">Jumlah pesanan berdasarkan tanggal dibuat.</p>
                 </div>
                 <a href="{{ route('admin.orders.index') }}" class="text-[10px] font-bold text-[#31569e] hover:underline">Lihat detail</a>
             </div>
+            <form method="GET" action="{{ route('admin.dashboard') }}" class="mt-4 grid gap-2 rounded-lg bg-[#f8faff] p-3 sm:grid-cols-[minmax(150px,0.8fr)_1fr_1fr_auto] sm:items-end">
+                <div>
+                    <label for="trend-period" class="mb-1 block text-[10px] font-semibold text-slate-600">Rentang waktu</label>
+                    <select id="trend-period" name="period" class="w-full rounded-md border-[#dce4f5] py-1.5 text-[10px] focus:border-[#31569e] focus:ring-[#31569e]">
+                        <option value="weekly" @selected($period === 'weekly')>Mingguan (7 hari)</option>
+                        <option value="monthly" @selected($period === 'monthly')>Bulanan</option>
+                        <option value="yearly" @selected($period === 'yearly')>Tahunan</option>
+                        <option value="custom" @selected($period === 'custom')>Custom tanggal</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="trend-from" class="mb-1 block text-[10px] font-semibold text-slate-600">Dari tanggal (untuk custom)</label>
+                    <input id="trend-from" type="date" name="from" value="{{ $trendStart->toDateString() }}" class="w-full rounded-md border-[#dce4f5] py-1.5 text-[10px] focus:border-[#31569e] focus:ring-[#31569e]">
+                </div>
+                <div>
+                    <label for="trend-to" class="mb-1 block text-[10px] font-semibold text-slate-600">Sampai tanggal (untuk custom)</label>
+                    <input id="trend-to" type="date" name="to" value="{{ $trendEnd->toDateString() }}" class="w-full rounded-md border-[#dce4f5] py-1.5 text-[10px] focus:border-[#31569e] focus:ring-[#31569e]">
+                </div>
+                <button class="col-span-full min-h-11 rounded-lg bg-[#12377f] px-5 text-xs font-bold text-white shadow-sm transition hover:bg-[#09296d] hover:shadow focus:outline-none focus:ring-2 focus:ring-[#31569e] focus:ring-offset-2">Terapkan</button>
+            </form>
             <div class="mt-4">
-                <svg viewBox="0 0 400 190" role="img" aria-label="Grafik tren jumlah pesanan tujuh hari terakhir" class="h-52 w-full overflow-visible">
+                <svg viewBox="0 0 400 190" role="img" aria-label="{{ $trendTitle }}" class="h-52 w-full overflow-visible">
                     @foreach ([0, 1, 2, 3] as $grid)
                         @php($gridY = 30 + ($grid * 37))
                         <line x1="12" y1="{{ $gridY }}" x2="388" y2="{{ $gridY }}" stroke="#e8edf6" stroke-width="1" />
@@ -83,8 +103,10 @@
                     @foreach ($chartPoints as $point)
                         <circle cx="{{ $point['x'] }}" cy="{{ $point['y'] }}" r="3.5" fill="white" stroke="#173c91" stroke-width="2" />
                     @endforeach
-                    @foreach ($trend as $index => $day)
-                        <text x="{{ 12 + ($index * 376 / 6) }}" y="174" text-anchor="middle" fill="#64748b" font-size="9">{{ $day['label'] }}</text>
+                    @foreach ($chartPoints as $index => $point)
+                        @if ($index % max(1, (int) ceil($trend->count() / 7)) === 0 || $loop->last)
+                            <text x="{{ $point['x'] }}" y="174" text-anchor="middle" fill="#64748b" font-size="9">{{ $trend[$index]['label'] }}</text>
+                        @endif
                     @endforeach
                 </svg>
             </div>

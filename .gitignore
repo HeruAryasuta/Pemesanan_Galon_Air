@@ -13,6 +13,7 @@
 /.zed
 /auth.json
 /node_modules
+/osrm-data/
 /public/build
 /public/hot
 /public/storage

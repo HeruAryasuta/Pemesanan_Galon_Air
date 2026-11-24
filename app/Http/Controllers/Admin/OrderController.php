@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Courier;
 use App\Models\Order;
+use App\Support\CourierCapacity;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -43,14 +44,32 @@ class OrderController extends Controller
 
     public function show(Order $order): View
     {
-        $order->load(['user', 'address', 'items.product', 'delivery.courier']);
+        $order->load(['user', 'address.serviceZone', 'items.product', 'delivery.courier.serviceZone']);
+        $capacity = app(CourierCapacity::class);
         $couriers = Courier::query()
-            ->where('is_available', true)
-            ->orWhere('id', $order->delivery?->courier_id)
+            ->where(function ($query) use ($order): void {
+                $query->where(function ($eligible) use ($order): void {
+                    $eligible->whereNotNull('service_zone_id')
+                        ->where('service_zone_id', $order->address?->service_zone_id)
+                        ->where('is_available', true);
+                })->orWhere('id', $order->delivery?->courier_id);
+            })
             ->orderBy('name')
-            ->get();
+            ->get()
+            ->filter(function (Courier $courier) use ($capacity, $order): bool {
+                $isCurrentCourier = $order->delivery?->courier_id === $courier->id;
+                if (! $isCurrentCourier && $courier->service_zone_id !== $order->address?->service_zone_id) {
+                    return false;
+                }
 
-        return view('admin.orders.show', compact('order', 'couriers'));
+                $currentLoad = $capacity->activeLoad($courier, $isCurrentCourier ? $order->id : null);
+
+                return $capacity->fits($courier, $capacity->orderLoad($order), $currentLoad);
+            })
+            ->values();
+        $orderLoad = $capacity->orderLoad($order);
+
+        return view('admin.orders.show', compact('order', 'couriers', 'orderLoad'));
     }
 
     public function update(Request $request, Order $order): RedirectResponse
@@ -105,7 +124,7 @@ class OrderController extends Controller
         } catch (\RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         } catch (\Throwable $e) {
-            Log::error('Gagal update status order #' . $order->id . ': ' . $e->getMessage());
+            Log::error('Gagal update status order #'.$order->id.': '.$e->getMessage());
 
             return back()->with('error', 'Gagal memperbarui status pesanan.');
         }
@@ -129,7 +148,7 @@ class OrderController extends Controller
             DB::transaction(function () use ($order, $validated): void {
                 $delivery = $order->delivery()->lockForUpdate()->firstOrFail();
                 $courier = Courier::whereKey($validated['courier_id'])->lockForUpdate()->firstOrFail();
-                $lockedOrder = Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
+                $lockedOrder = Order::with(['address', 'items'])->whereKey($order->id)->lockForUpdate()->firstOrFail();
 
                 if ($lockedOrder->payment_method === 'bank_transfer' && $lockedOrder->payment_status !== 'paid') {
                     throw new \RuntimeException('Pesanan transfer belum dapat ditugaskan sebelum pembayaran diverifikasi.');
@@ -139,22 +158,41 @@ class OrderController extends Controller
                     throw new \RuntimeException('Kurir yang dipilih sedang tidak tersedia.');
                 }
 
-                if ($delivery->courier_id && $delivery->courier_id !== $courier->id) {
-                    Courier::whereKey($delivery->courier_id)->update(['is_available' => true]);
+                if ($courier->service_zone_id !== $lockedOrder->address?->service_zone_id) {
+                    throw new \RuntimeException('Wilayah kurir tidak sesuai dengan wilayah alamat pengantaran.');
                 }
 
+                $capacity = app(CourierCapacity::class);
+                $existingLoad = $capacity->activeLoad($courier, $delivery->courier_id === $courier->id ? $lockedOrder->id : null);
+                $orderLoad = $capacity->orderLoad($lockedOrder);
+                if (! $capacity->fits($courier, $orderLoad, $existingLoad)) {
+                    throw new \RuntimeException('Jumlah barang melebihi kapasitas kendaraan kurir yang dipilih.');
+                }
+
+                $previousCourierId = $delivery->courier_id;
                 $delivery->update([
                     'courier_id' => $courier->id,
                     'status' => 'assigned',
                 ]);
                 $courier->update(['is_available' => false]);
+
+                if ($previousCourierId && $previousCourierId !== $courier->id) {
+                    $previousCourierHasActiveDeliveries = Courier::find($previousCourierId)?->deliveries()
+                        ->where('deliveries.id', '!=', $delivery->id)
+                        ->whereIn('status', ['assigned', 'in_transit'])
+                        ->exists();
+
+                    if (! $previousCourierHasActiveDeliveries) {
+                        Courier::whereKey($previousCourierId)->update(['is_available' => true]);
+                    }
+                }
             });
 
             return back()->with('success', 'Kurir berhasil ditugaskan.');
         } catch (\RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         } catch (\Throwable $e) {
-            Log::error('Gagal assign kurir ke order #' . $order->id . ': ' . $e->getMessage());
+            Log::error('Gagal assign kurir ke order #'.$order->id.': '.$e->getMessage());
 
             return back()->with('error', 'Gagal menugaskan kurir.');
         }
@@ -185,7 +223,7 @@ class OrderController extends Controller
         } catch (\RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         } catch (\Throwable $e) {
-            Log::error('Gagal mencatat pembayaran order #' . $order->id . ': ' . $e->getMessage());
+            Log::error('Gagal mencatat pembayaran order #'.$order->id.': '.$e->getMessage());
 
             return back()->with('error', 'Gagal mencatat pembayaran pesanan.');
         }

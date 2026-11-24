@@ -31,24 +31,26 @@
                 <section class="rounded-xl border border-[#e6ebf5] bg-white p-4 shadow-sm sm:p-5">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                            <h2 class="text-sm font-bold text-[#202a3b]">Rute dari lokasi kurir</h2>
-                            <p class="mt-1 text-[10px] leading-4 text-slate-500">Izinkan akses lokasi, lalu sistem akan membuat rute jalan langsung dari posisi kurir saat itu ke alamat tujuan.</p>
+                            <h2 class="text-sm font-bold text-[#202a3b]">Rute dari depo</h2>
+                            <p class="mt-1 text-[10px] leading-4 text-slate-500">Rute selalu dimulai dari depo, lalu menuju alamat tujuan pengantaran.</p>
                         </div>
                         <button
                             type="button"
                             data-courier-route-button
                             class="inline-flex min-h-9 items-center justify-center rounded-lg bg-[#12377f] px-3 py-2 text-[10px] font-bold text-white transition hover:bg-[#09296d] disabled:cursor-wait disabled:opacity-60"
-                        >Tampilkan rute ke tujuan</button>
+                        >Tampilkan rute dari depo</button>
                     </div>
                     <p data-courier-route-status class="mt-2 text-[10px] leading-4 text-slate-500" role="status" aria-live="polite"></p>
                     <div
                         class="mt-3 h-64 overflow-hidden rounded-lg border border-[#e6ebf5] bg-[#eaf0ed]"
                         data-courier-route-map
-                        data-route-url="{{ route('courier.deliveries.route-from-location', $delivery) }}"
+                        data-route-url="{{ route('courier.deliveries.route-from-depot', $delivery) }}"
+                        data-depot-latitude="{{ (float) config('routing.depot.latitude') }}"
+                        data-depot-longitude="{{ (float) config('routing.depot.longitude') }}"
                         data-destination-latitude="{{ (float) $delivery->order->address->latitude }}"
                         data-destination-longitude="{{ (float) $delivery->order->address->longitude }}"
                         role="img"
-                        aria-label="Peta rute dari lokasi kurir saat ini menuju alamat pesanan"
+                        aria-label="Peta rute dari depo menuju alamat pesanan"
                     ></div>
                 </section>
             @elseif (in_array($delivery->status, ['assigned', 'in_transit'], true))
@@ -59,8 +61,19 @@
 
             @if ($delivery->routeStop?->route)
                 <section class="rounded-xl border border-[#e6ebf5] bg-white p-4 shadow-sm sm:p-5">
-                    <h2 class="text-sm font-bold text-[#202a3b]">Urutan rute</h2>
-                    <p class="mt-1 text-[10px] text-slate-500">Rute {{ $delivery->routeStop->route->route_date->timezone(config('app.display_timezone'))->format('d M Y') }}</p>
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h2 class="text-sm font-bold text-[#202a3b]">Rute #{{ $delivery->routeStop->route->id }}</h2>
+                            <p class="mt-1 text-[10px] text-slate-500">Ditetapkan admin · {{ $delivery->routeStop->route->route_date->timezone(config('app.display_timezone'))->format('d M Y') }}</p>
+                        </div>
+                        <div class="text-right text-[9px] font-semibold text-slate-600">
+                            <p>{{ $delivery->routeStop->route->stops->count() }} titik pemberhentian</p>
+                            @if ($delivery->routeStop->route->total_distance_meters)
+                                <p class="mt-1">{{ number_format($delivery->routeStop->route->total_distance_meters / 1000, 1, ',', '.') }} km · {{ intdiv($delivery->routeStop->route->total_duration_seconds ?? 0, 60) }} menit</p>
+                            @endif
+                        </div>
+                    </div>
+                    <h3 class="mt-4 border-t border-[#edf0f7] pt-4 text-xs font-bold text-[#202a3b]">Urutan pemberhentian</h3>
                     <ol class="mt-4 space-y-3">
                         @foreach ($delivery->routeStop->route->stops as $stop)
                             <li class="flex gap-3 rounded-lg {{ $stop->delivery_id === $delivery->id ? 'bg-[#edf2ff]' : 'bg-slate-50' }} p-3">

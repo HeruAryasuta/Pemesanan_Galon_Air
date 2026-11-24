@@ -53,5 +53,5 @@
             >
         </div>
     </div>
-    <p class="text-[9px] leading-4 text-slate-500">Alamat dikenali otomatis melalui Nominatim OpenStreetMap. Permintaan peta dan koordinat akan diproses oleh layanan publik OpenStreetMap.</p>
+    <p class="text-[9px] leading-4 text-slate-500">Alamat dan wilayah pengantaran akan dikenali otomatis jika area terdeteksi. Periksa kembali hasilnya sebelum menyimpan; jika wilayah tidak dikenali, pilih secara manual. Permintaan peta dan koordinat diproses oleh layanan publik OpenStreetMap.</p>
 </div>

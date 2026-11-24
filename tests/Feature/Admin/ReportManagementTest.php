@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -85,6 +86,35 @@ class ReportManagementTest extends TestCase
         $this->actingAs($admin)
             ->get(route('admin.reports.index', ['from' => '2026-10-02', 'to' => '2026-10-01']))
             ->assertSessionHasErrors('to');
+    }
+
+    public function test_custom_report_requires_both_dates(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)
+            ->get(route('admin.reports.index', ['period' => 'custom']))
+            ->assertSessionHasErrors(['from', 'to']);
+    }
+
+    public function test_report_supports_weekly_monthly_and_yearly_periods(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $today = CarbonImmutable::now(config('app.display_timezone'));
+        $periods = [
+            'weekly' => [$today->startOfDay()->subDays(6), $today->endOfDay()],
+            'monthly' => [$today->startOfMonth(), $today->endOfMonth()],
+            'yearly' => [$today->startOfYear(), $today->endOfYear()],
+        ];
+
+        foreach ($periods as $period => [$expectedFrom, $expectedTo]) {
+            $this->actingAs($admin)
+                ->get(route('admin.reports.index', ['period' => $period]))
+                ->assertOk()
+                ->assertViewHas('period', $period)
+                ->assertViewHas('from', fn ($from) => $from->toDateString() === $expectedFrom->toDateString())
+                ->assertViewHas('to', fn ($to) => $to->toDateString() === $expectedTo->toDateString());
+        }
     }
 
     public function test_customer_cannot_access_reports(): void

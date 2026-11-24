@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
+use App\Support\ServiceZoneMatcher;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
@@ -12,7 +13,7 @@ use Illuminate\Support\Facades\Log;
 
 class ReverseGeocodeController extends Controller
 {
-    public function __invoke(Request $request): JsonResponse
+    public function __invoke(Request $request, ServiceZoneMatcher $serviceZoneMatcher): JsonResponse
     {
         $coordinates = $request->validate([
             'latitude' => ['required', 'numeric', 'between:-90,90'],
@@ -55,10 +56,14 @@ class ReverseGeocodeController extends Controller
         }
 
         $label = is_array($result) ? trim((string) ($result['name'] ?? '')) : '';
+        $serviceZoneId = $serviceZoneMatcher->matchGeocodedAddress(
+            is_array($result['address'] ?? null) ? $result['address'] : [],
+        )?->id;
 
         return response()->json([
             'full_address' => $fullAddress,
             'label' => $label !== '' ? $label : null,
+            'service_zone_id' => $serviceZoneId,
         ]);
     }
 }
