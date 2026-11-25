@@ -64,6 +64,9 @@ Route::post('/courier-application', [CourierApplicationController::class, 'store
 // ===== USER (wajib login) =====
 Route::middleware('auth')->name('user.')->group(function () {
     Route::get('/checkout', [CheckoutController::class, 'index'])->name('checkout.index');
+    Route::post('/checkout/shipping-quote', [CheckoutController::class, 'shippingQuote'])
+        ->middleware('throttle:10,1')
+        ->name('checkout.shipping-quote');
     Route::post('/checkout', [CheckoutController::class, 'store'])->name('checkout.store');
 
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');

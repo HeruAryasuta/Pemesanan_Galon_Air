@@ -14,6 +14,20 @@ class CourierCapacity
         return (int) config('courier.vehicle_capacities.'.$courier->vehicle_type, 0);
     }
 
+    public function smallestVehicleTypeForLoad(int $load): ?string
+    {
+        $capacities = config('courier.vehicle_capacities', []);
+        asort($capacities);
+
+        foreach ($capacities as $vehicleType => $capacity) {
+            if ($load <= (int) $capacity) {
+                return (string) $vehicleType;
+            }
+        }
+
+        return null;
+    }
+
     public function orderLoad(Order $order): int
     {
         if ($order->relationLoaded('items')) {

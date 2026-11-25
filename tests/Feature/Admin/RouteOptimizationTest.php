@@ -70,7 +70,7 @@ class RouteOptimizationTest extends TestCase
             ->assertSee('Estimasi waktu jalan');
 
         $response->assertViewHas('routePlan', function ($routePlan) use ($first, $nearer, $farther): bool {
-            return $routePlan->pluck('id')->all() === [$first->id, $farther->id, $nearer->id]
+            return $routePlan->pluck('id')->all() === [$first->id, $nearer->id, $farther->id]
                 && $routePlan[0]->segment_distance_meters === 1000
                 && $routePlan[1]->segment_duration_seconds === 120;
         })->assertViewHas('routeMapPoints', function ($routeMapPoints): bool {
@@ -109,7 +109,7 @@ class RouteOptimizationTest extends TestCase
         $this->assertCount(5, $route->route_geometry);
         $this->assertSame($route->route_geometry[0], $route->route_geometry[4]);
         $this->assertSame(
-            [$first->id, $farther->id, $nearer->id],
+            [$first->id, $nearer->id, $farther->id],
             $route->stops->pluck('delivery_id')->all(),
         );
         $this->assertSame(1000, $route->stops->first()->distance_from_previous_meters);
@@ -224,33 +224,36 @@ class RouteOptimizationTest extends TestCase
             ->assertSessionHasErrors('delivery_ids');
     }
 
-    public function test_exact_tsp_finds_a_shorter_road_distance_than_nearest_neighbor(): void
+    public function test_nearest_neighbor_and_two_opt_are_used_for_short_routes_and_compared_with_manual_order(): void
     {
         $this->osrmDistanceMatrix = [
-            [0, 1, 2, 3],
-            [1, 0, 2, 2],
-            [2, 2, 0, 100],
-            [3, 2, 1, 0],
+            [0, 12, 4, 5, 2],
+            [9, 0, 6, 5, 3],
+            [29, 11, 0, 20, 22],
+            [3, 5, 12, 0, 15],
+            [1, 17, 16, 21, 0],
         ];
 
         $admin = User::factory()->create(['role' => 'admin']);
-        $firstNearest = $this->createDelivery(0.0, 0.01);
-        $secondNearest = $this->createDelivery(0.0, 0.02);
-        $thirdNearest = $this->createDelivery(0.0, 0.03);
+        $deliveries = collect(range(1, 4))
+            ->map(fn (int $index): Delivery => $this->createDelivery(0.0, $index / 100));
 
         $this->actingAs($admin)
             ->get(route('admin.routes.optimize', [
                 'service_zone_id' => $this->serviceZoneId(),
-                'delivery_ids' => [$firstNearest->id, $secondNearest->id, $thirdNearest->id],
+                'delivery_ids' => $deliveries->pluck('id')->all(),
             ]))
             ->assertOk()
-            ->assertViewHas('manualDistanceMeters', 106)
-            ->assertViewHas('comparisonDistanceMeters', 6)
-            ->assertViewHas('routePlan', fn ($routePlan): bool => $routePlan->pluck('id')->all() === [
-                $firstNearest->id,
-                $thirdNearest->id,
-                $secondNearest->id,
-            ]);
+            ->assertViewHas('manualDistanceMeters', 54)
+            ->assertViewHas('comparisonDistanceMeters', 37)
+            ->assertViewHas('routePlan', function ($routePlan) use ($deliveries): bool {
+                return $routePlan->pluck('id')->all() === [
+                    $deliveries[3]->id,
+                    $deliveries[1]->id,
+                    $deliveries[0]->id,
+                    $deliveries[2]->id,
+                ];
+            });
     }
 
     public function test_larger_delivery_sets_return_a_complete_heuristic_route(): void

@@ -42,7 +42,15 @@
                 </div>
             @endif
 
-            <form id="place-order-form" method="POST" action="{{ route('user.checkout.store') }}" x-data="{ addressMode: '{{ $addresses->isEmpty() || old('address_id') === 'new' ? 'new' : 'saved' }}' }">
+            <form
+                id="place-order-form"
+                method="POST"
+                action="{{ route('user.checkout.store') }}"
+                data-checkout-pricing
+                data-shipping-quote-url="{{ route('user.checkout.shipping-quote') }}"
+                data-order-subtotal="{{ $subtotal }}"
+                x-data="{ addressMode: '{{ $addresses->isEmpty() || old('address_id') === 'new' ? 'new' : 'saved' }}' }"
+            >
                 @csrf
                 <div class="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
                 <div class="space-y-4">
@@ -63,6 +71,8 @@
                                                 type="radio"
                                                 name="address_id"
                                                 value="{{ $address->id }}"
+                                                data-address-latitude="{{ $address->latitude }}"
+                                                data-address-longitude="{{ $address->longitude }}"
                                                 required
                                                 @checked((string) old('address_id', $addresses->firstWhere('is_primary', true)?->id ?? $addresses->first()->id) === (string) $address->id)
                                                 @change="addressMode = 'saved'"
@@ -143,6 +153,7 @@
                                     id="checkout-new"
                                     :latitude="old('latitude')"
                                     :longitude="old('longitude')"
+                                    :required="true"
                                 />
                                 <label class="flex cursor-pointer items-center gap-2 text-[10px] font-medium text-slate-600">
                                     <input type="checkbox" name="is_primary" value="1" @checked(old('is_primary')) class="h-4 w-4 rounded border-slate-300 text-[#12377f] focus:ring-[#31569e]">
@@ -225,20 +236,20 @@
                         </div>
                         <div class="flex items-center justify-between gap-3">
                             <span class="font-semibold text-slate-600">Biaya pengantaran</span>
-                            <span class="font-semibold text-[#202a3b]">Rp{{ number_format($deliveryFee, 0, ',', '.') }}</span>
+                            <span data-checkout-delivery-fee class="font-semibold text-[#202a3b]">Hitung...</span>
                         </div>
                     </div>
                     <div class="flex items-center justify-between gap-3 border-t border-[#edf0f7] pt-4">
                         <span class="text-xs font-bold text-[#202a3b]">Total pesanan</span>
-                        <span class="text-base font-extrabold text-[#09296d]">Rp{{ number_format($subtotal + $deliveryFee, 0, ',', '.') }}</span>
+                        <span data-checkout-total class="text-base font-extrabold text-[#09296d]">Hitung...</span>
                     </div>
-                    <p class="mt-2 text-[10px] leading-5 text-slate-500">Tarif pengantaran tetap Rp{{ number_format($deliveryFee, 0, ',', '.') }} per pesanan.</p>
+                    <p data-checkout-shipping-status class="mt-2 text-[10px] leading-5 text-slate-500" role="status" aria-live="polite">Ongkir dihitung berdasarkan jarak pulang-pergi dan kelas kendaraan yang sesuai dengan muatan.</p>
 
                     @if ($cartHasUnavailableItems)
                         <p class="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-[10px] leading-4 text-amber-800" role="status">Ada produk yang stoknya tidak mencukupi atau sudah tidak tersedia. Periksa kembali keranjang Anda.</p>
                         <a href="{{ route('user.cart.index') }}" class="mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-[#dce4f5] px-4 py-2 text-xs font-bold text-[#31569e] hover:bg-[#edf2ff]">Periksa keranjang</a>
                     @else
-                        <button type="submit" class="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-[#12377f] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#09296d] focus:outline-none focus:ring-2 focus:ring-[#31569e] focus:ring-offset-2">Buat pesanan</button>
+                        <button type="submit" data-checkout-submit disabled class="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-[#12377f] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#09296d] focus:outline-none focus:ring-2 focus:ring-[#31569e] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">Buat pesanan</button>
                     @endif
                     <p class="mt-3 text-center text-[9px] leading-4 text-slate-500">Pesanan akan tercatat dengan status menunggu konfirmasi.</p>
                 </aside>

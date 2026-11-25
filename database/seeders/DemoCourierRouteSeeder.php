@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\Route as DeliveryRoute;
 use App\Models\ServiceZone;
 use App\Models\User;
+use App\Services\DeliveryFeeCalculator;
 use App\Services\Routing\OsrmTspService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -85,6 +86,12 @@ class DemoCourierRouteSeeder extends Seeder
             throw new RuntimeException('Produk demo Galon Aqua 19L tidak tersedia atau tidak aktif.');
         }
 
+        $deliveryFee = app(DeliveryFeeCalculator::class)->quote(
+            1,
+            (float) $address->latitude,
+            (float) $address->longitude,
+        )['delivery_fee'];
+
         $order = Order::query()->firstOrCreate(
             [
                 'user_id' => $customer->id,
@@ -93,8 +100,8 @@ class DemoCourierRouteSeeder extends Seeder
             [
                 'address_id' => $address->id,
                 'status' => 'confirmed',
-                'total_price' => $product->price + (int) config('delivery.flat_fee'),
-                'delivery_fee' => (int) config('delivery.flat_fee'),
+                'total_price' => $product->price + $deliveryFee,
+                'delivery_fee' => $deliveryFee,
                 'payment_method' => 'cod',
                 'payment_status' => 'unpaid',
                 'ordered_at' => now(),

@@ -137,6 +137,8 @@ const initializeAddressMap = (container) => {
     const setCoordinates = (point) => {
         latitudeInput.value = point.lat.toFixed(7);
         longitudeInput.value = point.lng.toFixed(7);
+        latitudeInput.dispatchEvent(new Event('change', { bubbles: true }));
+        longitudeInput.dispatchEvent(new Event('change', { bubbles: true }));
     };
 
     const updateCoordinatesFromMarker = () => {
@@ -448,6 +450,117 @@ document.querySelectorAll('[data-address-map]').forEach((container) => {
 
 document.querySelectorAll('[data-route-map]').forEach(initializeRouteMap);
 document.querySelectorAll('[data-courier-route-map]').forEach(initializeCourierRouteMap);
+
+document.querySelectorAll('[data-checkout-pricing]').forEach((form) => {
+    const feeElement = form.querySelector('[data-checkout-delivery-fee]');
+    const totalElement = form.querySelector('[data-checkout-total]');
+    const status = form.querySelector('[data-checkout-shipping-status]');
+    const submitButton = form.querySelector('[data-checkout-submit]');
+    const savedAddressInputs = [...form.querySelectorAll('input[name="address_id"]')];
+    const latitudeInput = form.querySelector('[data-address-picker] input[name="latitude"]');
+    const longitudeInput = form.querySelector('[data-address-picker] input[name="longitude"]');
+    const subtotal = Number.parseInt(form.dataset.orderSubtotal, 10);
+    let requestController;
+    let quoteTimeout;
+    let quoteReady = false;
+
+    if (!feeElement || !totalElement || !status || !submitButton || !Number.isFinite(subtotal)) {
+        return;
+    }
+
+    const formatCurrency = (amount) => `Rp${new Intl.NumberFormat('id-ID').format(amount)}`;
+
+    const updateQuote = async () => {
+        const selectedAddress = savedAddressInputs.find((input) => input.checked);
+        if (!selectedAddress) {
+            status.classList.add('text-rose-700');
+            status.textContent = 'Pilih alamat pengantaran untuk menghitung ongkir.';
+            submitButton.disabled = true;
+            quoteReady = false;
+            return;
+        }
+
+        const requestData = { address_id: selectedAddress.value };
+        if (selectedAddress.value === 'new') {
+            const latitude = Number.parseFloat(latitudeInput?.value);
+            const longitude = Number.parseFloat(longitudeInput?.value);
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+                status.classList.add('text-rose-700');
+                status.textContent = 'Tentukan titik alamat pada peta agar ongkir dapat dihitung.';
+                submitButton.disabled = true;
+                quoteReady = false;
+                feeElement.textContent = '—';
+                totalElement.textContent = '—';
+                return;
+            }
+            requestData.latitude = latitude;
+            requestData.longitude = longitude;
+        }
+
+        requestController?.abort();
+        requestController = new AbortController();
+        status.classList.remove('text-rose-700', 'text-emerald-700');
+        status.textContent = 'Menghitung jarak jalan pulang-pergi dari depo…';
+        feeElement.textContent = 'Menghitung...';
+        totalElement.textContent = 'Menghitung...';
+        submitButton.disabled = true;
+        quoteReady = false;
+
+        try {
+            const response = await fetch(form.dataset.shippingQuoteUrl, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                },
+                body: JSON.stringify(requestData),
+                signal: requestController.signal,
+            });
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.message || 'Ongkir tidak dapat dihitung.');
+            }
+
+            feeElement.textContent = formatCurrency(result.delivery_fee);
+            totalElement.textContent = formatCurrency(subtotal + result.delivery_fee);
+            status.classList.add('text-emerald-700');
+            status.textContent = `Jarak pulang-pergi ${result.billed_kilometers} km · ${result.vehicle_type} · ${formatCurrency(result.rate_per_km)}/km (minimum ${formatCurrency(result.minimum_fee)}).`;
+            quoteReady = true;
+            submitButton.disabled = false;
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                return;
+            }
+            status.classList.add('text-rose-700');
+            status.textContent = error.message || 'Ongkir belum dapat dihitung. Periksa titik alamat dan koneksi layanan rute.';
+            feeElement.textContent = '—';
+            totalElement.textContent = '—';
+            submitButton.disabled = true;
+            quoteReady = false;
+        }
+    };
+
+    const scheduleQuote = () => {
+        window.clearTimeout(quoteTimeout);
+        quoteTimeout = window.setTimeout(updateQuote, 250);
+    };
+
+    savedAddressInputs.forEach((input) => input.addEventListener('change', scheduleQuote));
+    latitudeInput?.addEventListener('change', scheduleQuote);
+    longitudeInput?.addEventListener('change', scheduleQuote);
+
+    form.addEventListener('submit', (event) => {
+        if (!quoteReady) {
+            event.preventDefault();
+            status.classList.add('text-rose-700');
+            status.textContent = 'Tunggu sampai ongkir berhasil dihitung sebelum membuat pesanan.';
+        }
+    });
+
+    scheduleQuote();
+});
 
 document.querySelectorAll('[data-product-image-input]').forEach((input) => {
     const previewContainer = input.parentElement?.querySelector('[data-product-image-preview-container]');
