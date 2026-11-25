@@ -1,9 +1,9 @@
-@props(['id', 'latitude' => null, 'longitude' => null])
+@props(['id', 'latitude' => null, 'longitude' => null, 'required' => false])
 
 <div data-address-picker class="space-y-2.5">
     <input type="hidden" data-reverse-geocode-url value="{{ route('user.addresses.reverse-geocode') }}">
     <div>
-        <p class="text-[10px] font-semibold text-slate-700">Titik lokasi pada peta <span class="font-normal text-slate-500">(opsional)</span></p>
+        <p class="text-[10px] font-semibold text-slate-700">Titik lokasi pada peta <span class="font-normal text-slate-500">({{ $required ? 'wajib untuk menghitung ongkir' : 'opsional' }})</span></p>
         <p class="mt-1 text-[9px] leading-4 text-slate-500">Geser peta lalu ketuk titik alamat. Marker juga dapat digeser.</p>
         <button
             type="button"
@@ -34,6 +34,7 @@
                 min="-90"
                 max="90"
                 value="{{ $latitude }}"
+                @if ($required) required @endif
                 placeholder="-7.3180000"
                 class="w-full rounded-lg border-[#e0e6f3] px-2.5 py-2 text-[10px] focus:border-[#31569e] focus:ring-[#31569e]"
             >
@@ -48,6 +49,7 @@
                 min="-180"
                 max="180"
                 value="{{ $longitude }}"
+                @if ($required) required @endif
                 placeholder="112.7680000"
                 class="w-full rounded-lg border-[#e0e6f3] px-2.5 py-2 text-[10px] focus:border-[#31569e] focus:ring-[#31569e]"
             >

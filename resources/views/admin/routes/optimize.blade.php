@@ -299,7 +299,7 @@
             @endif
 
             <p class="mt-4 border-t border-[#edf0f7] pt-3 text-[9px] leading-4 text-slate-500">
-                Solver mencari siklus jaringan jalan dari depo, melewati semua pesanan, dan kembali ke depo. Untuk maksimal 14 pengantaran digunakan Held-Karp; rute yang lebih besar memakai nearest neighbor dan 2-opt.
+                Semua jumlah pesanan memakai Nearest Neighbor untuk menyusun rute awal, lalu 2-opt memperbaiki urutan hingga tidak ada perbaikan lokal atau mencapai 20 putaran. Heuristik ini skalabel tetapi tidak menjamin solusi global paling pendek.
             </p>
         </aside>
     </div>

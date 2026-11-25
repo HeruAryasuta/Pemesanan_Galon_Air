@@ -11,11 +11,45 @@ use App\Models\Product;
 use App\Models\ServiceZone;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request as HttpRequest;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class CheckoutTest extends TestCase
 {
     use RefreshDatabase;
+
+    private bool $osrmNoRoute = false;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config([
+            'services.osrm.url' => 'http://osrm.test',
+            'routing.depot.latitude' => -7.3414987,
+            'routing.depot.longitude' => 112.7677984,
+        ]);
+        Http::fake([
+            'http://osrm.test/route/v1/driving/*' => function () {
+                if ($this->osrmNoRoute) {
+                    return Http::response(['code' => 'NoRoute']);
+                }
+
+                return Http::response([
+                    'code' => 'Ok',
+                    'routes' => [[
+                        'distance' => 10001,
+                        'duration' => 1200,
+                        'legs' => [
+                            ['distance' => 5000, 'duration' => 600],
+                            ['distance' => 5001, 'duration' => 600],
+                        ],
+                    ]],
+                ]);
+            },
+        ]);
+    }
 
     public function test_checkout_requires_authentication(): void
     {
@@ -56,8 +90,8 @@ class CheckoutTest extends TestCase
             ->assertSee('Galon Aqua')
             ->assertSee('Rp42.000')
             ->assertSee('Biaya pengantaran')
-            ->assertSee('Rp5.000')
-            ->assertSee('Rp47.000')
+            ->assertSee('Hitung...')
+            ->assertSee('data-shipping-quote-url', false)
             ->assertSee('Metode pembayaran')
             ->assertSee('Titik lokasi pada peta')
             ->assertSee('name="latitude"', false)
@@ -96,6 +130,8 @@ class CheckoutTest extends TestCase
                 'label' => 'Rumah',
                 'full_address' => 'Jl. Gunung Anyar No. 10, Surabaya',
                 'service_zone_id' => $zone->id,
+                'latitude' => -7.35,
+                'longitude' => 112.77,
                 'payment_method' => 'cod',
             ])
             ->assertRedirect(route('user.orders.index'))
@@ -130,6 +166,8 @@ class CheckoutTest extends TestCase
                 'label' => 'Rumah',
                 'full_address' => 'Jl. Gunung Anyar No. 10, Surabaya',
                 'service_zone_id' => $zone->id,
+                'latitude' => -7.35,
+                'longitude' => 112.77,
                 'save_address' => '1',
                 'is_primary' => '1',
                 'payment_method' => 'cod',
@@ -215,8 +253,8 @@ class CheckoutTest extends TestCase
 
         $this->assertSame($user->id, $order->user_id);
         $this->assertSame($address->id, $order->address_id);
-        $this->assertSame(47000, $order->total_price);
-        $this->assertSame(5000, $order->delivery_fee);
+        $this->assertSame(47500, $order->total_price);
+        $this->assertSame(5500, $order->delivery_fee);
         $this->assertSame('cod', $order->payment_method);
         $this->assertSame('Hubungi saat tiba.', $order->notes);
         $this->assertSame(2, $order->items->sole()->quantity);
@@ -231,7 +269,7 @@ class CheckoutTest extends TestCase
             ->assertOk()
             ->assertSee('Pesanan berhasil dibuat.')
             ->assertSee('Galon Aqua')
-            ->assertSee('Ongkir Rp5.000')
+            ->assertSee('Ongkir Rp5.500')
             ->assertSee('Pembayaran: COD — Bayar saat diterima · Belum dibayar')
             ->assertSee('Menunggu konfirmasi')
             ->assertSee('Hubungi saat tiba.');
@@ -309,7 +347,7 @@ class CheckoutTest extends TestCase
 
     public function test_checkout_uses_the_configured_delivery_fee(): void
     {
-        config(['delivery.flat_fee' => 8500]);
+        config(['delivery.minimum_fee' => 8500]);
         $user = User::factory()->create();
         $product = $this->createProduct(['stock' => 8]);
         $address = $this->createAddress($user);
@@ -326,6 +364,88 @@ class CheckoutTest extends TestCase
 
         $this->assertSame(8500, $order->delivery_fee);
         $this->assertSame(29500, $order->total_price);
+    }
+
+    public function test_checkout_shipping_quote_uses_round_trip_distance_and_smallest_suitable_vehicle(): void
+    {
+        $user = User::factory()->create();
+        $address = $this->createAddress($user);
+        $product = $this->createProduct(['stock' => 40]);
+
+        foreach ([
+            1 => ['Sepeda motor', 5500],
+            3 => ['Tosa', 11000],
+            11 => ['Pick up', 11000],
+            21 => ['Truck', 22000],
+        ] as $quantity => [$vehicleType, $deliveryFee]) {
+            $this->actingAs($user)
+                ->withSession(['cart' => [$product->id => $quantity]])
+                ->postJson(route('user.checkout.shipping-quote'), [
+                    'address_id' => $address->id,
+                ])
+                ->assertOk()
+                ->assertJsonPath('distance_meters', 10001)
+                ->assertJsonPath('billed_kilometers', 11)
+                ->assertJsonPath('vehicle_type', $vehicleType)
+                ->assertJsonPath('delivery_fee', $deliveryFee);
+        }
+
+        Http::assertSent(function (HttpRequest $request): bool {
+            $path = rawurldecode((string) parse_url($request->url(), PHP_URL_PATH));
+
+            return str_ends_with($path, '112.7677984,-7.3414987;112.7700000,-7.3500000;112.7677984,-7.3414987');
+        });
+    }
+
+    public function test_checkout_shipping_quote_uses_per_kilometer_rate_above_minimum(): void
+    {
+        config(['delivery.minimum_fee' => 5000]);
+        Http::fake([
+            'http://osrm.test/route/v1/driving/*' => Http::response([
+                'code' => 'Ok',
+                'routes' => [[
+                    'distance' => 10001,
+                    'duration' => 1200,
+                    'legs' => [
+                        ['distance' => 5000, 'duration' => 600],
+                        ['distance' => 5001, 'duration' => 600],
+                    ],
+                ]],
+            ]),
+        ]);
+        $user = User::factory()->create();
+        $address = $this->createAddress($user);
+        $product = $this->createProduct();
+
+        $this->actingAs($user)
+            ->withSession(['cart' => [$product->id => 1]])
+            ->postJson(route('user.checkout.shipping-quote'), [
+                'address_id' => $address->id,
+            ])
+            ->assertOk()
+            ->assertJsonPath('distance_meters', 10001)
+            ->assertJsonPath('billed_kilometers', 11)
+            ->assertJsonPath('rate_per_km', 500)
+            ->assertJsonPath('delivery_fee', 5500);
+    }
+
+    public function test_checkout_requires_valid_coordinates_and_osrm_route_before_creating_order(): void
+    {
+        $this->osrmNoRoute = true;
+        $user = User::factory()->create();
+        $product = $this->createProduct();
+        $address = $this->createAddress($user);
+
+        $this->actingAs($user)
+            ->withSession(['cart' => [$product->id => 1]])
+            ->post(route('user.checkout.store'), [
+                'address_id' => $address->id,
+                'payment_method' => 'cod',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('error', 'OSRM tidak dapat menghitung jarak pulang-pergi dari depo ke alamat.');
+
+        $this->assertSame(0, Order::count());
     }
 
     public function test_checkout_rejects_an_address_owned_by_another_user(): void
@@ -416,6 +536,8 @@ class CheckoutTest extends TestCase
             'label' => 'Rumah',
             'full_address' => 'Jl. Gunung Anyar No. 10, Surabaya',
             'service_zone_id' => ServiceZone::where('code', 'WIL-05')->value('id'),
+            'latitude' => -7.35,
+            'longitude' => 112.77,
             'is_primary' => false,
         ], $attributes));
     }

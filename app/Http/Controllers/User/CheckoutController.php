@@ -9,7 +9,9 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ServiceZone;
+use App\Services\DeliveryFeeCalculator;
 use App\Support\ServiceZoneMatcher;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -48,7 +50,6 @@ class CheckoutController extends Controller
                 );
             }
         });
-        $deliveryFee = config('delivery.flat_fee');
         $bankTransfer = config('payments.bank_transfer');
         $bankTransferConfigured = filled($bankTransfer['bank_name'])
             && filled($bankTransfer['account_name'])
@@ -62,14 +63,59 @@ class CheckoutController extends Controller
             'cart',
             'addresses',
             'serviceZones',
-            'deliveryFee',
             'cartHasUnavailableItems',
             'bankTransfer',
             'bankTransferConfigured',
         ));
     }
 
-    public function store(Request $request): RedirectResponse
+    public function shippingQuote(Request $request, DeliveryFeeCalculator $deliveryFeeCalculator): JsonResponse
+    {
+        $validated = $request->validate([
+            'address_id' => [
+                'required',
+                $request->input('address_id') === 'new'
+                    ? Rule::in(['new'])
+                    : Rule::exists('addresses', 'id')
+                        ->where('user_id', $request->user()->id)
+                        ->where('is_saved', true),
+            ],
+            'latitude' => ['required_if:address_id,new', 'nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['required_if:address_id,new', 'nullable', 'numeric', 'between:-180,180'],
+        ]);
+        $cart = $request->session()->get('cart', []);
+        if ($cart === []) {
+            return response()->json(['message' => 'Keranjang Anda kosong.'], 422);
+        }
+
+        if ($validated['address_id'] === 'new') {
+            $latitude = (float) $validated['latitude'];
+            $longitude = (float) $validated['longitude'];
+        } else {
+            $address = $request->user()->addresses()
+                ->where('is_saved', true)
+                ->findOrFail($validated['address_id']);
+            if ($address->latitude === null || $address->longitude === null) {
+                return response()->json([
+                    'message' => 'Alamat ini belum memiliki titik peta. Pilih alamat lain atau gunakan alamat baru dan tentukan titiknya.',
+                ], 422);
+            }
+            $latitude = (float) $address->latitude;
+            $longitude = (float) $address->longitude;
+        }
+
+        try {
+            return response()->json($deliveryFeeCalculator->quote(
+                (int) array_sum($cart),
+                $latitude,
+                $longitude,
+            ));
+        } catch (\RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+    }
+
+    public function store(Request $request, DeliveryFeeCalculator $deliveryFeeCalculator): RedirectResponse
     {
         $isNewAddress = $request->input('address_id') === 'new';
         $validated = $request->validate([
@@ -84,8 +130,8 @@ class CheckoutController extends Controller
             'label' => ['nullable', 'string', 'max:100'],
             'full_address' => [$isNewAddress ? 'required' : 'nullable', 'string', 'max:1000'],
             'service_zone_id' => [$isNewAddress ? 'required' : 'nullable', 'integer', 'exists:service_zones,id'],
-            'latitude' => ['nullable', 'required_with:longitude', 'numeric', 'between:-90,90'],
-            'longitude' => ['nullable', 'required_with:latitude', 'numeric', 'between:-180,180'],
+            'latitude' => [$isNewAddress ? 'required' : 'nullable', 'required_with:longitude', 'numeric', 'between:-90,90'],
+            'longitude' => [$isNewAddress ? 'required' : 'nullable', 'required_with:latitude', 'numeric', 'between:-180,180'],
             'is_primary' => ['nullable', 'boolean'],
             'save_address' => ['nullable', 'boolean'],
             'service_zone_ids' => ['sometimes', 'array'],
@@ -117,8 +163,26 @@ class CheckoutController extends Controller
                 ->withInput();
         }
 
+        $deliveryLatitude = $isNewAddress ? $validated['latitude'] ?? null : $address->latitude;
+        $deliveryLongitude = $isNewAddress ? $validated['longitude'] ?? null : $address->longitude;
+        if ($deliveryLatitude === null || $deliveryLongitude === null) {
+            return back()
+                ->withErrors(['address_id' => 'Titik peta alamat wajib tersedia untuk menghitung ongkos kirim.'])
+                ->withInput();
+        }
+
         try {
-            $order = DB::transaction(function () use ($request, $validated, $cart, $address, $isNewAddress, $serviceZoneId) {
+            $deliveryQuote = $deliveryFeeCalculator->quote(
+                (int) array_sum($cart),
+                (float) $deliveryLatitude,
+                (float) $deliveryLongitude,
+            );
+        } catch (\RuntimeException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        }
+
+        try {
+            $order = DB::transaction(function () use ($request, $validated, $cart, $address, $isNewAddress, $serviceZoneId, $deliveryQuote) {
                 if ($isNewAddress) {
                     $saveAddress = (bool) ($validated['save_address'] ?? false);
 
@@ -165,7 +229,7 @@ class CheckoutController extends Controller
                     $subtotal += $product->price * $qty;
                 }
 
-                $deliveryFee = config('delivery.flat_fee');
+                $deliveryFee = $deliveryQuote['delivery_fee'];
                 $order = Order::create([
                     'user_id' => $request->user()->id,
                     'address_id' => $orderAddress->id,

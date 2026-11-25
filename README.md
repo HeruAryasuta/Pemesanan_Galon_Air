@@ -23,7 +23,7 @@ Laravel is accessible, powerful, and provides tools required for large, robust a
 
 ## Route optimization (TSP + OSRM)
 
-Admin dapat membuka planner rute untuk memilih pengantaran aktif dan melihat pratinjau urutan, jarak, durasi, serta geometri jalan sebelum menetapkan rute ke kurir. Planner menggunakan OSRM Table untuk membuat matriks jarak jalan, lalu menyelesaikan TSP terbuka dari depo. Held-Karp dipakai untuk maksimal 14 pengantaran; jumlah yang lebih besar memakai nearest-neighbor dan 2-opt. Urutan terpilih dikirim ke OSRM Route untuk geometri dan estimasi durasi. Rute tidak kembali ke depo dan durasi tidak memperhitungkan lalu lintas langsung.
+Admin dapat membuka planner rute untuk memilih pengantaran aktif dan melihat pratinjau urutan, jarak, durasi, serta geometri jalan sebelum menetapkan rute ke kurir. Planner menggunakan OSRM Table untuk membuat matriks jarak jalan, lalu menghitung siklus dari depo, mengunjungi semua titik pengantaran, dan kembali ke depo. Semua jumlah pesanan memakai Nearest Neighbor untuk menyusun rute awal, lalu 2-opt memperbaiki urutan hingga tidak ada perbaikan lokal atau mencapai 20 putaran. Pendekatan heuristik ini skalabel tetapi tidak menjamin solusi global paling pendek. Urutan terpilih dikirim ke OSRM Route untuk geometri dan estimasi durasi. Durasi tidak memperhitungkan lalu lintas langsung.
 
 Configure these values in `.env`:
 
@@ -48,6 +48,10 @@ Pada detail pengantaran aktif, kurir dapat menekan **Tampilkan rute dari depo**.
 ### Kapasitas kendaraan dan wilayah kurir
 
 Setiap produk dihitung sebagai satu unit muatan per jumlah item, tanpa membedakan satuan produk. Kapasitas maksimum: sepeda motor 2 unit, Tosa 10 unit, pick up 20 unit, dan truck 40 unit. Pesanan atau rute yang melebihi kapasitas ditolak dan tidak dipecah ke kurir lain.
+
+### Tarif ongkos kirim
+
+Ongkos kirim dihitung dari jarak jalan pulang-pergi depo menggunakan OSRM, dibulatkan ke atas per kilometer. Jenis kendaraan mengikuti kendaraan terkecil yang kapasitasnya cukup untuk seluruh item pesanan. Tarif awal: sepeda motor Rp500/km, Tosa Rp1.000/km, pick up Rp1.000/km, dan truck Rp2.000/km, dengan ongkos minimum Rp5.000. Tarif dapat diubah melalui `DELIVERY_MINIMUM_FEE`, `DELIVERY_RATE_MOTOR_PER_KM`, `DELIVERY_RATE_TOSA_PER_KM`, `DELIVERY_RATE_PICKUP_PER_KM`, dan `DELIVERY_RATE_TRUCK_PER_KM` di `.env`. Checkout membutuhkan koordinat alamat dan OSRM yang dapat menghitung rute; jika tidak tersedia, pesanan tidak dapat dibuat.
 
 Pelanggan memilih wilayah pada alamat pengantaran: Wilayah 1 (Waru/Wadung Asri), Wilayah 2 (Gedangan), Wilayah 3 (Sedati), Wilayah 4 (Rungkut), Wilayah 5 (Gunung Anyar), atau Wilayah 6 (Sukolilo). Admin menetapkan setiap kurir ke satu wilayah. Setiap wilayah memiliki satu slot kurir awal; slot tambahan dapat ditambahkan dari halaman **Kelola Kurir**. Alamat lama yang belum memiliki wilayah perlu diperbarui sebelum pesanannya dapat ditugaskan atau dimasukkan ke rute.
 
