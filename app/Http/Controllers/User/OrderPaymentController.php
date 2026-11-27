@@ -4,6 +4,7 @@ namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Services\OrderCancellationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -13,9 +14,18 @@ use Illuminate\Validation\ValidationException;
 
 class OrderPaymentController extends Controller
 {
-    public function store(Request $request, Order $order): RedirectResponse
+    public function store(
+        Request $request,
+        Order $order,
+        OrderCancellationService $cancellationService,
+    ): RedirectResponse
     {
         abort_unless($order->user_id === $request->user()->id, 404);
+
+        if ($order->payment_method === 'bank_transfer') {
+            $cancellationService->expireUnpaidTransfer($order);
+            $order->refresh();
+        }
 
         $validated = $request->validate([
             'payment_proof' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
@@ -49,6 +59,8 @@ class OrderPaymentController extends Controller
                     $lockedOrder->payment_method !== 'bank_transfer'
                     || ! in_array($lockedOrder->payment_status, ['unpaid', 'rejected'], true)
                     || in_array($lockedOrder->status, ['cancelled', 'delivered'], true)
+                    || ($lockedOrder->payment_deadline_at
+                        && $lockedOrder->payment_deadline_at->lessThanOrEqualTo(now()))
                 ) {
                     throw new \RuntimeException('Pesanan ini tidak lagi dapat menerima bukti pembayaran.');
                 }
@@ -65,6 +77,8 @@ class OrderPaymentController extends Controller
             Storage::disk('local')->delete($newProofPath);
 
             if ($e instanceof \RuntimeException) {
+                $cancellationService->expireUnpaidTransfer($order);
+
                 throw ValidationException::withMessages(['payment_proof' => $e->getMessage()]);
             }
 

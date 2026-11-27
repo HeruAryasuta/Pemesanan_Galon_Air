@@ -5,11 +5,13 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Courier;
 use App\Models\Order;
+use App\Services\OrderCancellationService;
 use App\Support\CourierCapacity;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class OrderController extends Controller
@@ -44,13 +46,13 @@ class OrderController extends Controller
 
     public function show(Order $order): View
     {
-        $order->load(['user', 'address.serviceZone', 'items.product', 'delivery.courier.serviceZone']);
+        $order->load(['user', 'address.serviceZone', 'items.product', 'delivery.courier.serviceZone', 'delivery.routeStop.route']);
         $capacity = app(CourierCapacity::class);
         $couriers = Courier::query()
             ->where(function ($query) use ($order): void {
                 $query->where(function ($eligible) use ($order): void {
                     $eligible->whereNotNull('service_zone_id')
-                        ->where('service_zone_id', $order->address?->service_zone_id)
+                        ->where('service_zone_id', $order->delivery_service_zone_id)
                         ->where('is_available', true);
                 })->orWhere('id', $order->delivery?->courier_id);
             })
@@ -58,7 +60,7 @@ class OrderController extends Controller
             ->get()
             ->filter(function (Courier $courier) use ($capacity, $order): bool {
                 $isCurrentCourier = $order->delivery?->courier_id === $courier->id;
-                if (! $isCurrentCourier && $courier->service_zone_id !== $order->address?->service_zone_id) {
+                if (! $isCurrentCourier && $courier->service_zone_id !== $order->delivery_service_zone_id) {
                     return false;
                 }
 
@@ -75,41 +77,48 @@ class OrderController extends Controller
     public function update(Request $request, Order $order): RedirectResponse
     {
         $validated = $request->validate([
-            'status' => ['required', 'in:pending,confirmed,processing,delivered,cancelled'],
+            'status' => ['required', 'in:pending,confirmed,processing,delivered'],
         ]);
 
         try {
             DB::transaction(function () use ($order, $validated): void {
                 $lockedOrder = Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
+                $allowedTransitions = [
+                    'pending' => ['confirmed'],
+                    'confirmed' => ['processing'],
+                    'processing' => ['delivered'],
+                ];
 
-                if (
-                    $lockedOrder->payment_method === 'bank_transfer'
-                    && $lockedOrder->payment_status !== 'paid'
-                    && ! in_array($validated['status'], ['pending', 'cancelled'], true)
-                ) {
-                    throw new \RuntimeException('Pesanan transfer harus menunggu verifikasi pembayaran sebelum diproses.');
-                }
-
-                $lockedOrder->update($validated);
-
-                $delivery = $lockedOrder->delivery()->lockForUpdate()->first();
-                if (! $delivery) {
+                if ($lockedOrder->status === $validated['status']) {
                     return;
                 }
 
-                $deliveryStatus = match ($validated['status']) {
-                    'delivered' => 'delivered',
-                    'cancelled' => 'failed',
-                    'processing' => 'in_transit',
-                    default => $order->delivery->status,
-                };
+                if (! in_array($validated['status'], $allowedTransitions[$lockedOrder->status] ?? [], true)) {
+                    throw new \RuntimeException('Perubahan status pesanan tidak sesuai urutan proses.');
+                }
 
-                $delivery->update([
-                    'status' => $deliveryStatus,
-                    'delivered_at' => $validated['status'] === 'delivered' ? now() : null,
-                ]);
+                if ($lockedOrder->payment_method === 'bank_transfer' && $lockedOrder->payment_status !== 'paid') {
+                    throw new \RuntimeException('Pesanan transfer harus menunggu verifikasi pembayaran sebelum diproses.');
+                }
 
-                if (in_array($validated['status'], ['delivered', 'cancelled'], true) && $delivery->courier_id) {
+                $delivery = $lockedOrder->delivery()->lockForUpdate()->first();
+                if ($validated['status'] === 'processing' && $delivery?->status !== 'in_transit') {
+                    throw new \RuntimeException('Pesanan hanya dapat ditandai dalam pengantaran setelah kurir memulai tugas.');
+                }
+
+                if ($validated['status'] === 'delivered' && $delivery?->status !== 'in_transit') {
+                    throw new \RuntimeException('Pesanan hanya dapat diselesaikan setelah pengantaran dimulai.');
+                }
+
+                $lockedOrder->update($validated);
+                if ($validated['status'] === 'delivered' && $delivery) {
+                    $delivery->update([
+                        'status' => 'delivered',
+                        'delivered_at' => now(),
+                    ]);
+                }
+
+                if ($validated['status'] === 'delivered' && $delivery?->courier_id) {
                     $hasActiveDeliveries = Courier::find($delivery->courier_id)?->deliveries()
                         ->whereIn('status', ['assigned', 'in_transit'])
                         ->exists();
@@ -128,6 +137,55 @@ class OrderController extends Controller
 
             return back()->with('error', 'Gagal memperbarui status pesanan.');
         }
+    }
+
+    public function cancel(Request $request, Order $order, OrderCancellationService $cancellationService): RedirectResponse
+    {
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'max:500'],
+        ]);
+
+        try {
+            $cancellationService->cancel($order, $request->user(), $validated['reason']);
+        } catch (\RuntimeException $exception) {
+            throw ValidationException::withMessages(['order' => $exception->getMessage()]);
+        } catch (\Throwable $exception) {
+            Log::error('Gagal membatalkan pesanan #'.$order->id.': '.$exception->getMessage());
+
+            return back()->with('error', 'Pesanan gagal dibatalkan. Silakan coba lagi.');
+        }
+
+        $order->refresh();
+        $message = $order->payment_status === 'paid'
+            ? 'Pesanan dibatalkan. Pengembalian dana menunggu diproses oleh admin.'
+            : 'Pesanan berhasil dibatalkan dan stok telah dikembalikan.';
+
+        return back()->with('success', $message);
+    }
+
+    public function markRefunded(Request $request, Order $order, OrderCancellationService $cancellationService): RedirectResponse
+    {
+        $validated = $request->validate([
+            'reference' => ['required', 'string', 'max:255'],
+            'note' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        try {
+            $cancellationService->markRefunded(
+                $order,
+                $request->user(),
+                $validated['reference'],
+                $validated['note'] ?? null,
+            );
+        } catch (\RuntimeException $exception) {
+            throw ValidationException::withMessages(['reference' => $exception->getMessage()]);
+        } catch (\Throwable $exception) {
+            Log::error('Gagal mencatat refund pesanan #'.$order->id.': '.$exception->getMessage());
+
+            return back()->with('error', 'Pengembalian dana gagal dicatat. Silakan coba lagi.');
+        }
+
+        return back()->with('success', 'Pengembalian dana berhasil dicatat.');
     }
 
     public function assignCourier(Request $request, Order $order): RedirectResponse
@@ -150,6 +208,13 @@ class OrderController extends Controller
                 $courier = Courier::whereKey($validated['courier_id'])->lockForUpdate()->firstOrFail();
                 $lockedOrder = Order::with(['address', 'items'])->whereKey($order->id)->lockForUpdate()->firstOrFail();
 
+                if (
+                    ! in_array($lockedOrder->status, ['pending', 'confirmed'], true)
+                    || ! in_array($delivery->status, ['pending', 'assigned'], true)
+                ) {
+                    throw new \RuntimeException('Kurir hanya dapat ditugaskan sebelum pengantaran dimulai.');
+                }
+
                 if ($lockedOrder->payment_method === 'bank_transfer' && $lockedOrder->payment_status !== 'paid') {
                     throw new \RuntimeException('Pesanan transfer belum dapat ditugaskan sebelum pembayaran diverifikasi.');
                 }
@@ -158,7 +223,7 @@ class OrderController extends Controller
                     throw new \RuntimeException('Kurir yang dipilih sedang tidak tersedia.');
                 }
 
-                if ($courier->service_zone_id !== $lockedOrder->address?->service_zone_id) {
+                if ($courier->service_zone_id !== $lockedOrder->delivery_service_zone_id) {
                     throw new \RuntimeException('Wilayah kurir tidak sesuai dengan wilayah alamat pengantaran.');
                 }
 

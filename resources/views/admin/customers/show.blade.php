@@ -68,7 +68,7 @@
                         <span class="rounded-full bg-[#edf2ff] px-2.5 py-1 text-[9px] font-bold text-[#31569e]">{{ $statusLabels[$order->status] ?? $order->status }}</span>
                     </div>
                     <div class="mt-3 flex flex-wrap items-end justify-between gap-3">
-                        <p class="text-[10px] leading-4 text-slate-500">{{ $order->address?->label ?: 'Alamat pengantaran' }}: {{ $order->address?->full_address ?? 'Alamat tidak tersedia' }}</p>
+                        <p class="text-[10px] leading-4 text-slate-500">{{ $order->delivery_address_label ?: 'Alamat pengantaran' }}: {{ $order->delivery_address ?? 'Alamat tidak tersedia' }}</p>
                         <p class="whitespace-nowrap text-xs font-extrabold text-[#09296d]">Rp{{ number_format($order->total_price, 0, ',', '.') }}</p>
                     </div>
                 </article>

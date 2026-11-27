@@ -30,7 +30,12 @@ class PaymentVerificationController extends Controller
 
     public function proof(Order $order): BinaryFileResponse
     {
-        abort_unless($order->payment_method === 'bank_transfer' && $order->payment_proof_path, 404);
+        abort_unless(
+            $order->payment_method === 'bank_transfer'
+                && $order->status !== 'cancelled'
+                && $order->payment_proof_path,
+            404,
+        );
 
         $disk = Storage::disk('local');
         abort_unless($disk->exists($order->payment_proof_path), 404, 'Bukti pembayaran tidak ditemukan.');
@@ -54,6 +59,7 @@ class PaymentVerificationController extends Controller
 
                 if (
                     $lockedOrder->payment_method !== 'bank_transfer'
+                    || $lockedOrder->status === 'cancelled'
                     || $lockedOrder->payment_status !== 'pending_verification'
                     || ! $lockedOrder->payment_proof_path
                     || ! Storage::disk('local')->exists($lockedOrder->payment_proof_path)
@@ -80,7 +86,7 @@ class PaymentVerificationController extends Controller
         } catch (\RuntimeException $e) {
             throw ValidationException::withMessages(['decision' => $e->getMessage()]);
         } catch (\Throwable $e) {
-            Log::error('Gagal meninjau pembayaran order #' . $order->id . ': ' . $e->getMessage());
+            Log::error('Gagal meninjau pembayaran order #'.$order->id.': '.$e->getMessage());
 
             return back()->with('error', 'Pembayaran gagal diperbarui. Silakan coba lagi.');
         }

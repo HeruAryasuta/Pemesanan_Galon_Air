@@ -42,7 +42,7 @@
                                 <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#12377f] text-[9px] font-bold text-white">{{ $stop->visit_order }}</span>
                                 <span class="min-w-0">
                                     <span class="block text-[9px] font-bold text-[#202a3b]">Pemberhentian {{ $stop->visit_order }}</span>
-                                    <span class="mt-0.5 block text-[9px] leading-4 text-slate-600">{{ $stop->delivery->order->address?->full_address ?? 'Alamat pengantaran tidak tersedia' }}</span>
+                                    <span class="mt-0.5 block text-[9px] leading-4 text-slate-600">{{ $stop->delivery->order->delivery_address ?? 'Alamat pengantaran tidak tersedia' }}</span>
                                 </span>
                             </li>
                         @endforeach
@@ -73,7 +73,7 @@
                     </div>
                     <div class="mt-4 border-t border-[#edf0f7] pt-4">
                         <p class="text-xs font-semibold text-[#202a3b]">{{ $delivery->order->user->name }}</p>
-                        <p class="mt-1 text-xs leading-5 text-slate-600">{{ $delivery->order->address?->full_address ?? 'Alamat pengantaran tidak tersedia' }}</p>
+                        <p class="mt-1 text-xs leading-5 text-slate-600">{{ $delivery->order->delivery_address ?? 'Alamat pengantaran tidak tersedia' }}</p>
                         @if ($delivery->routeStop)
                             <p class="mt-2 text-[10px] font-semibold text-[#31569e]">Rute #{{ $delivery->routeStop->route->id }} · Pemberhentian {{ $delivery->routeStop->visit_order }} dari {{ $delivery->routeStop->route->stops->count() }} · {{ $delivery->routeStop->route->route_date->timezone(config('app.display_timezone'))->format('d M Y') }}</p>
                         @endif

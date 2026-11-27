@@ -29,8 +29,9 @@ class ReverseGeocodeController extends Controller
                     'format' => 'jsonv2',
                     'lat' => $coordinates['latitude'],
                     'lon' => $coordinates['longitude'],
-                    'zoom' => 18,
+                    'zoom' => 17,
                     'addressdetails' => 1,
+                    'accept-language' => 'id',
                     ...array_filter([
                         'email' => config('services.nominatim.email'),
                     ], fn (?string $email): bool => $email !== null && $email !== ''),
@@ -39,6 +40,7 @@ class ReverseGeocodeController extends Controller
         } catch (ConnectionException|RequestException $exception) {
             Log::warning('Nominatim reverse geocoding request failed.', [
                 'exception' => $exception::class,
+                'status' => $exception instanceof RequestException ? $exception->response->status() : null,
             ]);
 
             return response()->json([

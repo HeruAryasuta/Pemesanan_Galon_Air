@@ -31,6 +31,9 @@
                 </div>
                 <div class="mt-3 space-y-2 border-t border-[#edf0f7] pt-3 text-xs">
                     <div class="flex justify-between"><span class="text-slate-600">Subtotal produk</span><span>Rp{{ number_format($order->items->sum(fn ($item) => $item->quantity * $item->price_snapshot), 0, ',', '.') }}</span></div>
+                    @if ($order->discount_amount > 0)
+                        <div class="flex justify-between text-emerald-700"><span>Diskon pembelian pertama</span><span>−Rp{{ number_format($order->discount_amount, 0, ',', '.') }}</span></div>
+                    @endif
                     <div class="flex justify-between"><span class="text-slate-600">Biaya pengantaran</span><span>Rp{{ number_format($order->delivery_fee, 0, ',', '.') }}</span></div>
                     <div class="flex justify-between border-t border-[#edf0f7] pt-3 text-sm font-extrabold text-[#09296d]"><span>Total pesanan</span><span>Rp{{ number_format($order->total_price, 0, ',', '.') }}</span></div>
                 </div>
@@ -46,8 +49,8 @@
                     </div>
                     <div>
                         <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Alamat</p>
-                        <p class="mt-1 text-xs leading-5 text-slate-700">{{ $order->address->label ?: 'Alamat pengantaran' }} — {{ $order->address->full_address }}</p>
-                        <p class="mt-1 text-[10px] font-semibold text-[#31569e]">{{ $order->address->serviceZone?->name }}{{ $order->address->serviceZone ? ' · '.$order->address->serviceZone->area_description : ' · Wilayah belum dipilih' }}</p>
+                        <p class="mt-1 text-xs leading-5 text-slate-700">{{ $order->delivery_address_label ?: 'Alamat pengantaran' }} — {{ $order->delivery_address }}</p>
+                        <p class="mt-1 text-[10px] font-semibold text-[#31569e]">{{ $order->delivery_service_zone_name ?: 'Wilayah belum dipilih' }}{{ $order->delivery_service_zone_area ? ' · '.$order->delivery_service_zone_area : '' }}</p>
                     </div>
                 </div>
                 @if ($order->notes)
@@ -71,23 +74,40 @@
         <aside class="space-y-5">
             <section class="rounded-2xl border border-[#e8ecf6] bg-white p-4 shadow-sm sm:p-5">
                 <h2 class="text-sm font-bold">Perbarui status pesanan</h2>
-                <form method="POST" action="{{ route('admin.orders.update', $order) }}" class="mt-4 space-y-3">
-                    @csrf
-                    @method('PUT')
-                    <label for="order-status" class="block text-xs font-semibold text-slate-600">Status</label>
-                    <select id="order-status" name="status" required class="w-full rounded-lg border-[#dce4f5] text-sm focus:border-[#31569e] focus:ring-[#31569e]">
-                        @foreach ($statusLabels as $value => $label)
-                            <option value="{{ $value }}" @disabled($order->payment_method === 'bank_transfer' && $order->payment_status !== 'paid' && ! in_array($value, ['pending', 'cancelled'], true)) @selected($order->status === $value)>{{ $label }}</option>
-                        @endforeach
-                    </select>
-                    @if ($order->payment_method === 'bank_transfer' && $order->payment_status !== 'paid')
-                        <p class="text-[10px] leading-4 text-amber-700">Pesanan transfer hanya dapat diproses setelah pembayaran terverifikasi.</p>
-                    @endif
-                    <button class="w-full rounded-lg bg-[#12377f] px-4 py-2.5 text-xs font-bold text-white hover:bg-[#09296d]">Simpan status</button>
-                </form>
+                @php($nextStatuses = ['pending' => ['confirmed'], 'processing' => ['delivered']][$order->status] ?? [])
+                @if ($nextStatuses && ($order->payment_method !== 'bank_transfer' || $order->payment_status === 'paid'))
+                    <form method="POST" action="{{ route('admin.orders.update', $order) }}" class="mt-4 space-y-3">
+                        @csrf
+                        @method('PUT')
+                        <label for="order-status" class="block text-xs font-semibold text-slate-600">Status berikutnya</label>
+                        <select id="order-status" name="status" required class="w-full rounded-lg border-[#dce4f5] text-sm focus:border-[#31569e] focus:ring-[#31569e]">
+                            @foreach ($nextStatuses as $value)
+                                <option value="{{ $value }}">{{ $statusLabels[$value] }}</option>
+                            @endforeach
+                        </select>
+                        <button class="w-full rounded-lg bg-[#12377f] px-4 py-2.5 text-xs font-bold text-white hover:bg-[#09296d]">Simpan status</button>
+                    </form>
+                @elseif ($order->status === 'confirmed')
+                    <p class="mt-2 text-[10px] leading-5 text-slate-500">Status akan berubah saat kurir memulai pengantaran.</p>
+                @else
+                    <p class="mt-2 text-[10px] leading-5 text-slate-500">Tidak ada perubahan status manual yang tersedia pada tahap ini.</p>
+                @endif
+                @if ($order->payment_method === 'bank_transfer' && $order->payment_status !== 'paid' && $order->status !== 'cancelled')
+                    <p class="mt-2 text-[10px] leading-4 text-amber-700">Pesanan transfer hanya dapat diproses setelah pembayaran terverifikasi.</p>
+                @endif
+                @if (in_array($order->status, ['pending', 'confirmed'], true) && in_array($order->delivery?->status, ['pending', 'assigned'], true) && $order->delivery?->routeStop?->route?->status !== 'in_progress')
+                    <form method="POST" action="{{ route('admin.orders.cancel', $order) }}" class="mt-4 border-t border-[#edf0f7] pt-4" onsubmit="return confirm('Batalkan pesanan dan kembalikan stok?');">
+                        @csrf
+                        <label for="admin-cancellation-reason" class="block text-[10px] font-semibold text-slate-600">Alasan pembatalan</label>
+                        <textarea id="admin-cancellation-reason" name="reason" rows="2" maxlength="500" required class="mt-1.5 w-full rounded-lg border-[#dce4f5] text-xs focus:border-[#31569e] focus:ring-[#31569e]" placeholder="Wajib diisi untuk audit">{{ old('reason') }}</textarea>
+                        @error('reason')<p class="mt-1 text-[10px] text-rose-700">{{ $message }}</p>@enderror
+                        @error('order')<p class="mt-1 text-[10px] text-rose-700">{{ $message }}</p>@enderror
+                        <button class="mt-2 w-full rounded-lg border border-rose-200 px-4 py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-50">Batalkan pesanan</button>
+                    </form>
+                @endif
             </section>
 
-            @if (! in_array($order->status, ['delivered', 'cancelled'], true) && $order->delivery && ($order->payment_method !== 'bank_transfer' || $order->payment_status === 'paid'))
+            @if (in_array($order->status, ['pending', 'confirmed'], true) && in_array($order->delivery?->status, ['pending', 'assigned'], true) && $order->delivery && ($order->payment_method !== 'bank_transfer' || $order->payment_status === 'paid'))
                 <section class="rounded-2xl border border-[#e8ecf6] bg-white p-4 shadow-sm sm:p-5">
                     <h2 class="text-sm font-bold">Tugaskan kurir</h2>
                     <form method="POST" action="{{ route('admin.orders.assign-courier', $order) }}" class="mt-4 space-y-3">
@@ -101,7 +121,7 @@
                             @endforeach
                         </select>
                         @if ($couriers->isEmpty())
-                            <p class="text-xs text-amber-700">{{ $order->address->service_zone_id ? 'Belum ada kurir tersedia di wilayah ini dengan kapasitas yang mencukupi.' : 'Alamat belum memiliki wilayah pengantaran. Minta pelanggan memilih wilayah pada alamatnya.' }}</p>
+                            <p class="text-xs text-amber-700">{{ $order->delivery_service_zone_id ? 'Belum ada kurir tersedia di wilayah ini dengan kapasitas yang mencukupi.' : 'Alamat belum memiliki wilayah pengantaran. Minta pelanggan memilih wilayah pada alamatnya.' }}</p>
                         @endif
                         <button @disabled($couriers->isEmpty()) class="w-full rounded-lg border border-[#dce4f5] px-4 py-2.5 text-xs font-bold text-[#31569e] hover:bg-[#edf2ff] disabled:cursor-not-allowed disabled:opacity-50">Simpan kurir</button>
                     </form>
@@ -110,7 +130,7 @@
 
             <section class="rounded-2xl border border-[#e8ecf6] bg-white p-4 shadow-sm sm:p-5">
                 <h2 class="text-sm font-bold">Pembayaran</h2>
-                @php($paymentStatusLabels = ['unpaid' => 'Belum dibayar', 'pending_verification' => 'Menunggu verifikasi', 'rejected' => 'Ditolak', 'paid' => 'Lunas / terverifikasi'])
+                @php($paymentStatusLabels = ['unpaid' => 'Belum dibayar', 'pending_verification' => 'Menunggu verifikasi', 'rejected' => 'Ditolak', 'paid' => 'Lunas / terverifikasi', 'cancelled' => 'Pesanan dibatalkan'])
                 <div class="mt-3 flex items-center justify-between gap-3 text-xs">
                     <span class="text-slate-600">Metode</span>
                     <span class="font-semibold">{{ $order->payment_method === 'cod' ? 'COD' : 'Transfer bank' }}</span>
@@ -119,8 +139,41 @@
                     <span class="text-slate-600">Status</span>
                     <span class="font-bold {{ $order->payment_status === 'paid' ? 'text-emerald-700' : ($order->payment_status === 'rejected' ? 'text-rose-700' : 'text-amber-700') }}">{{ $paymentStatusLabels[$order->payment_status] ?? $order->payment_status }}</span>
                 </div>
+                @if ($order->payment_method === 'bank_transfer' && $order->payment_deadline_at)
+                    <div class="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span class="text-slate-600">Batas pembayaran</span>
+                        <span class="text-right font-semibold">{{ $order->payment_deadline_at->timezone(config('app.display_timezone'))->format('d M Y, H:i') }}</span>
+                    </div>
+                @endif
+                @if ($order->refund_status !== 'not_required')
+                    <div class="mt-3 rounded-lg {{ $order->refund_status === 'pending' ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-800' }} p-3 text-[10px] leading-5">
+                        <p class="font-bold">Refund: {{ $order->refund_status === 'pending' ? 'Menunggu diproses' : 'Sudah diproses' }}</p>
+                        @if ($order->refund_reference)
+                            <p>Referensi: {{ $order->refund_reference }}</p>
+                        @endif
+                        @if ($order->refund_note)
+                            <p>Catatan: {{ $order->refund_note }}</p>
+                        @endif
+                    </div>
+                @endif
+                @if ($order->refund_status === 'pending')
+                    <form method="POST" action="{{ route('admin.orders.refund', $order) }}" class="mt-4 space-y-3 border-t border-[#edf0f7] pt-4">
+                        @csrf
+                        <p class="text-[10px] leading-4 text-amber-800">Lakukan refund secara manual terlebih dahulu, lalu catat bukti atau nomor referensinya.</p>
+                        <div>
+                            <label for="refund-reference" class="mb-1.5 block text-[10px] font-semibold text-slate-700">Referensi refund</label>
+                            <input id="refund-reference" name="reference" type="text" maxlength="255" required value="{{ old('reference') }}" class="w-full rounded-lg border-[#dce4f5] text-xs focus:border-[#31569e] focus:ring-[#31569e]" placeholder="Nomor transaksi / bukti transfer">
+                            @error('reference')<p class="mt-1 text-[10px] text-rose-700">{{ $message }}</p>@enderror
+                        </div>
+                        <div>
+                            <label for="refund-note" class="mb-1.5 block text-[10px] font-semibold text-slate-700">Catatan <span class="font-normal">(opsional)</span></label>
+                            <textarea id="refund-note" name="note" rows="2" maxlength="1000" class="w-full rounded-lg border-[#dce4f5] text-xs focus:border-[#31569e] focus:ring-[#31569e]">{{ old('note') }}</textarea>
+                        </div>
+                        <button class="w-full rounded-lg bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800">Catat refund selesai</button>
+                    </form>
+                @endif
                 @if ($order->payment_method === 'bank_transfer')
-                    @if ($order->payment_proof_path)
+                    @if ($order->payment_proof_path && $order->status !== 'cancelled')
                         <a href="{{ route('admin.orders.payment-proof.show', $order) }}" target="_blank" rel="noopener" class="mt-4 inline-flex min-h-9 w-full items-center justify-center rounded-lg border border-[#dce4f5] px-4 py-2 text-xs font-bold text-[#31569e] hover:bg-[#edf2ff]">Lihat bukti transfer</a>
                     @endif
                     @if ($order->payment_submitted_at)

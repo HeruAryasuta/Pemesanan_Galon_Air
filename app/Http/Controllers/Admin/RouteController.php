@@ -114,8 +114,8 @@ class RouteController extends Controller
         foreach ($routePlan as $index => $delivery) {
             $routeMapPoints[] = [
                 'label' => (string) ($index + 1),
-                'latitude' => (float) $delivery->order->address->latitude,
-                'longitude' => (float) $delivery->order->address->longitude,
+                'latitude' => (float) $delivery->order->delivery_latitude,
+                'longitude' => (float) $delivery->order->delivery_longitude,
             ];
         }
 
@@ -124,8 +124,13 @@ class RouteController extends Controller
             ->whereHas('order', fn ($query) => $query
                 ->whereNotIn('status', ['cancelled', 'delivered'])
                 ->where(fn ($orders) => $orders->where('payment_method', '!=', 'bank_transfer')->orWhere('payment_status', 'paid')))
-            ->whereDoesntHave('order.address', function ($query): void {
-                $query->whereNotNull('latitude')->whereNotNull('longitude');
+            ->whereDoesntHave('order', function ($query): void {
+                $query->where(fn ($orders) => $orders
+                    ->whereNotNull('order_latitude')
+                    ->whereNotNull('order_longitude'))
+                    ->orWhereHas('address', fn ($addresses) => $addresses
+                        ->whereNotNull('latitude')
+                        ->whereNotNull('longitude'));
             })
             ->count();
         $missingServiceZoneCount = Delivery::query()
@@ -133,7 +138,10 @@ class RouteController extends Controller
             ->whereHas('order', fn ($query) => $query
                 ->whereNotIn('status', ['cancelled', 'delivered'])
                 ->where(fn ($orders) => $orders->where('payment_method', '!=', 'bank_transfer')->orWhere('payment_status', 'paid')))
-            ->whereDoesntHave('order.address', fn ($query) => $query->whereNotNull('service_zone_id'))
+            ->whereHas('order', function ($query): void {
+                $query->whereNull('order_service_zone_id')
+                    ->whereDoesntHave('address', fn ($addresses) => $addresses->whereNotNull('service_zone_id'));
+            })
             ->count();
 
         return view('admin.routes.optimize', [
@@ -234,8 +242,8 @@ class RouteController extends Controller
                 foreach ($deliveries as $delivery) {
                     $plannedDelivery = $optimizedRoute['deliveries']->firstWhere('id', $delivery->id);
                     if ($plannedDelivery === null
-                        || (float) $plannedDelivery->order->address->latitude !== (float) $delivery->order->address->latitude
-                        || (float) $plannedDelivery->order->address->longitude !== (float) $delivery->order->address->longitude) {
+                        || (float) $plannedDelivery->order->delivery_latitude !== (float) $delivery->order->delivery_latitude
+                        || (float) $plannedDelivery->order->delivery_longitude !== (float) $delivery->order->delivery_longitude) {
                         throw new RuntimeException('Koordinat pengantaran berubah saat rute sedang dibuat. Silakan optimalkan kembali.');
                     }
                 }
@@ -293,15 +301,26 @@ class RouteController extends Controller
         }
 
         return Delivery::query()
-            ->with(['order.address', 'order.user', 'order.items.product.category'])
+            ->with(['order.address.serviceZone', 'order.user', 'order.items.product.category'])
             ->where('status', 'pending')
             ->whereHas('order', fn ($query) => $query
                 ->whereNotIn('status', ['cancelled', 'delivered'])
                 ->where(fn ($orders) => $orders->where('payment_method', '!=', 'bank_transfer')->orWhere('payment_status', 'paid')))
-            ->whereHas('order.address', fn ($query) => $query
-                ->whereNotNull('latitude')
-                ->whereNotNull('longitude')
-                ->where('service_zone_id', $serviceZoneId))
+            ->whereHas('order', function ($query) use ($serviceZoneId): void {
+                $query->where(function ($orders) use ($serviceZoneId): void {
+                    $orders->whereNotNull('order_latitude')
+                        ->whereNotNull('order_longitude')
+                        ->where('order_service_zone_id', $serviceZoneId);
+                })->orWhere(function ($orders) use ($serviceZoneId): void {
+                    $orders->whereNull('order_latitude')
+                        ->whereNull('order_longitude')
+                        ->whereNull('order_service_zone_id')
+                        ->whereHas('address', fn ($addresses) => $addresses
+                            ->whereNotNull('latitude')
+                            ->whereNotNull('longitude')
+                            ->where('service_zone_id', $serviceZoneId));
+                });
+            })
             ->orderBy('id')
             ->get();
     }

@@ -70,8 +70,8 @@
                 </div>
                 <div class="relative z-10 mx-auto w-full max-w-7xl">
                     <div class="home-hero-viewport">
-                        <div class="home-hero-track" :style="`transform: translateX(-${activeSlide * 50}%);`">
-                            <div id="beranda-slide" class="home-hero-slide flex items-center justify-center" :aria-hidden="activeSlide !== 0" :inert="activeSlide !== 0" role="group" aria-roledescription="slide" aria-label="1 dari 2">
+                        <div class="home-hero-track" :style="`transform: translateX(-${activeSlide * 33.333333}%);`">
+                            <div id="beranda-slide" class="home-hero-slide flex items-center justify-center" :aria-hidden="activeSlide !== 0" :inert="activeSlide !== 0" role="group" aria-roledescription="slide" aria-label="1 dari 3">
                                 <div class="mx-auto max-w-3xl">
                                     <span class="inline-flex rounded-full bg-[#e1ebff] px-3 py-1.5 text-[10px] font-semibold text-[#214b9a] sm:text-xs">
                                         Layanan Pengantaran Cepat &amp; Terpercaya
@@ -92,7 +92,7 @@
                                 </div>
                             </div>
 
-                            <div id="produk-populer" class="home-hero-slide" :aria-hidden="activeSlide !== 1" :inert="activeSlide !== 1" role="group" aria-roledescription="slide" aria-label="2 dari 2">
+                            <div id="produk-populer" class="home-hero-slide" :aria-hidden="activeSlide !== 1" :inert="activeSlide !== 1" role="group" aria-roledescription="slide" aria-label="2 dari 3">
                                 <div class="mb-4 flex flex-wrap items-end justify-between gap-3 text-left sm:mb-5">
                                     <div>
                                         <span class="inline-flex rounded-full bg-[#e8efff] px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#31569e]">Pilihan pelanggan</span>
@@ -128,16 +128,30 @@
                                     </div>
                                 @endif
                             </div>
+
+                            <div id="promo-pembelian-pertama" class="home-hero-slide flex items-center justify-center" :aria-hidden="activeSlide !== 2" :inert="activeSlide !== 2" role="group" aria-roledescription="slide" aria-label="3 dari 3">
+                                <div class="mx-auto max-w-3xl rounded-3xl border border-[#dce7ff] bg-white/90 px-6 py-8 shadow-[0_12px_35px_rgba(29,48,99,0.12)] sm:px-12 sm:py-10">
+                                    <span class="inline-flex rounded-full bg-[#fff0e8] px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#b84a1b] sm:text-[10px]">Promo pelanggan baru</span>
+                                    <h2 class="mt-4 text-3xl font-extrabold tracking-tight text-[#09296d] sm:text-5xl">Diskon 20%</h2>
+                                    <p class="mx-auto mt-3 max-w-xl text-sm font-semibold text-[#172033] sm:text-base">Diskon 20% untuk subtotal produk pada satu pesanan pertama.</p>
+                                    <p class="mx-auto mt-2 max-w-xl text-[10px] leading-5 text-slate-600 sm:text-xs">Promo berlaku sekali per akun dan tidak memotong ongkos kirim. Hak promo baru terpakai setelah pesanan selesai diantar; jika pesanan dibatalkan, haknya kembali. Selama pesanan promo masih aktif, hak promo ditahan.</p>
+                                    <a href="{{ route('user.products.index') }}" class="mt-6 inline-flex items-center gap-2 rounded-lg bg-[#12377f] px-5 py-3 text-xs font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#09296d]">
+                                        Belanja sekarang
+                                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                    </a>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     <div class="mt-5 flex items-center justify-center gap-3" role="group" aria-label="Kontrol slide beranda">
-                        <button type="button" @click="activeSlide = activeSlide === 0 ? 1 : 0" class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#dce4f5] bg-white/90 text-[#31569e] shadow-sm transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#31569e]" aria-label="Slide sebelumnya">
+                        <button type="button" @click="activeSlide = (activeSlide + 2) % 3" class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#dce4f5] bg-white/90 text-[#31569e] shadow-sm transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#31569e]" aria-label="Slide sebelumnya">
                             <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16 10H4m5 5-5-5 5-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         </button>
                         <button type="button" @click="activeSlide = 0" :aria-pressed="activeSlide === 0" class="h-2.5 w-2.5 rounded-full transition focus:outline-none focus:ring-2 focus:ring-[#31569e] focus:ring-offset-2" :class="activeSlide === 0 ? 'bg-[#12377f]' : 'bg-[#b8c5dd]'" aria-label="Tampilkan slide beranda"></button>
                         <button type="button" @click="activeSlide = 1" :aria-pressed="activeSlide === 1" class="h-2.5 w-2.5 rounded-full transition focus:outline-none focus:ring-2 focus:ring-[#31569e] focus:ring-offset-2" :class="activeSlide === 1 ? 'bg-[#12377f]' : 'bg-[#b8c5dd]'" aria-label="Tampilkan slide Produk Terlaris"></button>
-                        <button type="button" @click="activeSlide = activeSlide === 0 ? 1 : 0" class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#dce4f5] bg-white/90 text-[#31569e] shadow-sm transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#31569e]" aria-label="Slide berikutnya">
+                        <button type="button" @click="activeSlide = 2" :aria-pressed="activeSlide === 2" class="h-2.5 w-2.5 rounded-full transition focus:outline-none focus:ring-2 focus:ring-[#31569e] focus:ring-offset-2" :class="activeSlide === 2 ? 'bg-[#12377f]' : 'bg-[#b8c5dd]'" aria-label="Tampilkan slide Promo Pembelian Pertama"></button>
+                        <button type="button" @click="activeSlide = (activeSlide + 1) % 3" class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#dce4f5] bg-white/90 text-[#31569e] shadow-sm transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#31569e]" aria-label="Slide berikutnya">
                             <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         </button>
                     </div>

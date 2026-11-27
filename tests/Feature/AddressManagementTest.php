@@ -54,7 +54,7 @@ class AddressManagementTest extends TestCase
                 'name' => 'Toko Contoh',
                 'display_name' => 'Toko Contoh, Jalan Rungkut, Surabaya, Jawa Timur, Indonesia',
                 'address' => [
-                    'city_district' => 'Rungkut',
+                    'city_district' => 'Kecamatan Rungkut',
                 ],
             ]),
         ]);
@@ -74,7 +74,35 @@ class AddressManagementTest extends TestCase
         Http::assertSent(fn ($request): bool => str_starts_with($request->url(), 'https://nominatim.openstreetmap.org/reverse')
             && $request->hasHeader('User-Agent', 'PadmatirtaWisesaDepo/1.0')
             && (float) $request['lat'] === -7.3181234
-            && (float) $request['lon'] === 112.7681234);
+            && (float) $request['lon'] === 112.7681234
+            && (int) $request['zoom'] === 17
+            && $request['accept-language'] === 'id');
+    }
+
+    public function test_reverse_geocoding_matches_wadung_asri_to_the_waru_service_zone(): void
+    {
+        $serviceZone = ServiceZone::where('code', 'WIL-01')->firstOrFail();
+
+        Http::fake([
+            'https://nominatim.openstreetmap.org/reverse*' => Http::response([
+                'display_name' => 'Jalan Contoh, Wadung Asri, Waru, Sidoarjo, Jawa Timur, Indonesia',
+                'address' => [
+                    'city_district' => 'Kabupaten Sidoarjo',
+                    'suburb' => 'Wadung Asri',
+                ],
+            ]),
+        ]);
+
+        $this->actingAs(User::factory()->create())
+            ->postJson(route('user.addresses.reverse-geocode'), [
+                'latitude' => '-7.3481795',
+                'longitude' => '112.7679144',
+            ])
+            ->assertOk()
+            ->assertJson([
+                'full_address' => 'Jalan Contoh, Wadung Asri, Waru, Sidoarjo, Jawa Timur, Indonesia',
+                'service_zone_id' => $serviceZone->id,
+            ]);
     }
 
     public function test_reverse_geocoding_leaves_service_zone_unselected_for_unknown_areas(): void

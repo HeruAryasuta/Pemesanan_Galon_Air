@@ -49,6 +49,7 @@
                 data-checkout-pricing
                 data-shipping-quote-url="{{ route('user.checkout.shipping-quote') }}"
                 data-order-subtotal="{{ $subtotal }}"
+                data-order-discount="{{ $discountAmount }}"
                 x-data="{ addressMode: '{{ $addresses->isEmpty() || old('address_id') === 'new' ? 'new' : 'saved' }}' }"
             >
                 @csrf
@@ -199,7 +200,7 @@
                                 >
                                 <span>
                                     <span class="block text-xs font-bold text-[#202a3b]">Transfer bank</span>
-                                    <span class="mt-1 block text-[11px] leading-5 text-slate-600">Transfer sesuai total pesanan, lalu unggah bukti pembayaran.</span>
+                                    <span class="mt-1 block text-[11px] leading-5 text-slate-600">Transfer sesuai total pesanan dan unggah bukti dalam {{ (int) config('payments.bank_transfer.deadline_hours', 24) }} jam.</span>
                                 </span>
                             </label>
                             <div class="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[10px] leading-5 text-slate-600">
@@ -234,6 +235,21 @@
                             <span class="font-semibold text-slate-600">Subtotal produk</span>
                             <span class="font-semibold text-[#202a3b]">Rp{{ number_format($subtotal, 0, ',', '.') }}</span>
                         </div>
+                        @if ($discountAmount > 0)
+                            <div class="flex items-center justify-between gap-3 text-emerald-700">
+                                <span class="font-semibold">Diskon pembelian pertama ({{ $firstPurchaseDiscountPercent }}%)</span>
+                                <span data-checkout-discount class="font-semibold">−Rp{{ number_format($discountAmount, 0, ',', '.') }}</span>
+                            </div>
+                        @endif
+                        <p class="text-[10px] leading-5 text-slate-500">
+                            @if ($firstPurchaseDiscountAvailable)
+                                Promo hanya untuk subtotal produk. Hak diskon baru terpakai setelah pesanan selesai diantar; jika pesanan ini dibatalkan, hak promo kembali.
+                            @elseif ($hasUncompletedOrder)
+                                Hak promo ditahan selama ada pesanan yang belum selesai. Jika pesanan dibatalkan, hak promo kembali; setelah pesanan selesai diantar, promo dianggap telah digunakan.
+                            @elseif ($hasCompletedPurchase)
+                                Promo pembelian pertama sudah digunakan setelah pesanan sebelumnya selesai diantar.
+                            @endif
+                        </p>
                         <div class="flex items-center justify-between gap-3">
                             <span class="font-semibold text-slate-600">Biaya pengantaran</span>
                             <span data-checkout-delivery-fee class="font-semibold text-[#202a3b]">Hitung...</span>

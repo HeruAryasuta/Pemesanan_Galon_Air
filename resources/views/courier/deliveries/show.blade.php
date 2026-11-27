@@ -20,14 +20,14 @@
                 <h2 class="text-sm font-bold text-[#202a3b]">Informasi pelanggan</h2>
                 <p class="mt-4 text-xs font-semibold text-[#202a3b]">{{ $delivery->order->user->name }}</p>
                 <p class="mt-1 text-xs text-slate-600">{{ $delivery->order->user->phone ?: 'Nomor telepon tidak tersedia' }}</p>
-                <h3 class="mt-4 text-[10px] font-bold uppercase tracking-wide text-slate-500">{{ $delivery->order->address?->label ?: 'Alamat pengantaran' }}</h3>
-                <p class="mt-1 whitespace-pre-line text-xs leading-5 text-slate-700">{{ $delivery->order->address?->full_address ?? 'Alamat tidak tersedia' }}</p>
+                <h3 class="mt-4 text-[10px] font-bold uppercase tracking-wide text-slate-500">{{ $delivery->order->delivery_address_label ?: 'Alamat pengantaran' }}</h3>
+                <p class="mt-1 whitespace-pre-line text-xs leading-5 text-slate-700">{{ $delivery->order->delivery_address ?? 'Alamat tidak tersedia' }}</p>
                 @if ($delivery->order->notes)
                     <p class="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"><span class="font-bold">Catatan pesanan:</span> {{ $delivery->order->notes }}</p>
                 @endif
             </section>
 
-            @if ($delivery->order->address?->latitude !== null && $delivery->order->address?->longitude !== null && in_array($delivery->status, ['assigned', 'in_transit'], true))
+            @if ($delivery->order->delivery_latitude !== null && $delivery->order->delivery_longitude !== null && in_array($delivery->status, ['assigned', 'in_transit'], true))
                 <section class="rounded-xl border border-[#e6ebf5] bg-white p-4 shadow-sm sm:p-5">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div>
@@ -47,8 +47,8 @@
                         data-route-url="{{ route('courier.deliveries.route-from-depot', $delivery) }}"
                         data-depot-latitude="{{ (float) config('routing.depot.latitude') }}"
                         data-depot-longitude="{{ (float) config('routing.depot.longitude') }}"
-                        data-destination-latitude="{{ (float) $delivery->order->address->latitude }}"
-                        data-destination-longitude="{{ (float) $delivery->order->address->longitude }}"
+                        data-destination-latitude="{{ (float) $delivery->order->delivery_latitude }}"
+                        data-destination-longitude="{{ (float) $delivery->order->delivery_longitude }}"
                         role="img"
                         aria-label="Peta rute dari depo menuju alamat pesanan"
                     ></div>
@@ -78,7 +78,7 @@
                         @foreach ($delivery->routeStop->route->stops as $stop)
                             <li class="flex gap-3 rounded-lg {{ $stop->delivery_id === $delivery->id ? 'bg-[#edf2ff]' : 'bg-slate-50' }} p-3">
                                 <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-[10px] font-extrabold text-[#31569e]">{{ $stop->visit_order }}</span>
-                                <span class="text-xs leading-5 text-slate-700">{{ $stop->delivery->order->address?->full_address ?? 'Alamat tidak tersedia' }}</span>
+                                <span class="text-xs leading-5 text-slate-700">{{ $stop->delivery->order->delivery_address ?? 'Alamat tidak tersedia' }}</span>
                             </li>
                         @endforeach
                     </ol>

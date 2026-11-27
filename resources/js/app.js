@@ -460,11 +460,12 @@ document.querySelectorAll('[data-checkout-pricing]').forEach((form) => {
     const latitudeInput = form.querySelector('[data-address-picker] input[name="latitude"]');
     const longitudeInput = form.querySelector('[data-address-picker] input[name="longitude"]');
     const subtotal = Number.parseInt(form.dataset.orderSubtotal, 10);
+    const discount = Number.parseInt(form.dataset.orderDiscount || '0', 10);
     let requestController;
     let quoteTimeout;
     let quoteReady = false;
 
-    if (!feeElement || !totalElement || !status || !submitButton || !Number.isFinite(subtotal)) {
+    if (!feeElement || !totalElement || !status || !submitButton || !Number.isFinite(subtotal) || !Number.isFinite(discount)) {
         return;
     }
 
@@ -524,7 +525,7 @@ document.querySelectorAll('[data-checkout-pricing]').forEach((form) => {
             }
 
             feeElement.textContent = formatCurrency(result.delivery_fee);
-            totalElement.textContent = formatCurrency(subtotal + result.delivery_fee);
+            totalElement.textContent = formatCurrency(subtotal - discount + result.delivery_fee);
             status.classList.add('text-emerald-700');
             status.textContent = `Jarak pulang-pergi ${result.billed_kilometers} km · ${result.vehicle_type} · ${formatCurrency(result.rate_per_km)}/km (minimum ${formatCurrency(result.minimum_fee)}).`;
             quoteReady = true;

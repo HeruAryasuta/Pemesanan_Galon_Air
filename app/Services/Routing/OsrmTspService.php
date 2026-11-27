@@ -28,13 +28,14 @@ class OsrmTspService
             throw new RouteOptimizationException('Koordinat depo belum dikonfigurasi dengan benar.');
         }
 
-        $address = $delivery->order->address;
-        if ($address === null || $address->latitude === null || $address->longitude === null) {
+        $latitude = $delivery->order->delivery_latitude;
+        $longitude = $delivery->order->delivery_longitude;
+        if ($latitude === null || $longitude === null) {
             throw new RouteOptimizationException('Alamat tujuan belum memiliki koordinat.');
         }
 
-        $destinationLatitude = (float) $address->latitude;
-        $destinationLongitude = (float) $address->longitude;
+        $destinationLatitude = (float) $latitude;
+        $destinationLongitude = (float) $longitude;
         $coordinates = [
             [(float) $depotLongitude, (float) $depotLatitude],
             [$destinationLongitude, $destinationLatitude],
@@ -153,8 +154,8 @@ class OsrmTspService
 
         $coordinates = [[(float) $depotLongitude, (float) $depotLatitude]];
         foreach ($deliveries as $delivery) {
-            $longitude = (float) $delivery->order->address->longitude;
-            $latitude = (float) $delivery->order->address->latitude;
+            $longitude = (float) $delivery->order->delivery_longitude;
+            $latitude = (float) $delivery->order->delivery_latitude;
 
             if ($longitude < -180 || $longitude > 180 || $latitude < -90 || $latitude > 90) {
                 throw new RouteOptimizationException('Koordinat salah satu alamat pengantaran tidak valid.');
