@@ -48,6 +48,14 @@
                     </div>
                     <span class="rounded-full px-3 py-1.5 text-[10px] font-bold {{ $statusBadgeClass }}">{{ $currentOrderStatus['label'] }}</span>
                 </div>
+                @if (in_array($order->status, ['pending', 'confirmed'], true) && in_array($order->delivery?->status, ['pending', 'assigned'], true) && $order->delivery?->routeStop?->route?->status !== 'in_progress')
+                    <form method="POST" action="{{ route('user.orders.cancel', $order) }}" class="mt-4 rounded-xl border border-rose-100 bg-rose-50 p-3" onsubmit="return confirm('Yakin ingin membatalkan pesanan ini? Stok akan dikembalikan.');">
+                        @csrf
+                        <label for="cancellation-reason" class="block text-[10px] font-semibold text-rose-900">Alasan pembatalan <span class="font-normal">(opsional)</span></label>
+                        <input id="cancellation-reason" name="reason" type="text" maxlength="500" class="mt-1.5 w-full rounded-lg border-rose-200 bg-white px-3 py-2 text-[10px] focus:border-rose-400 focus:ring-rose-300" placeholder="Boleh dikosongkan">
+                        <button type="submit" class="mt-2 min-h-9 rounded-lg border border-rose-200 bg-white px-3 py-2 text-[10px] font-bold text-rose-700 hover:bg-rose-100">Batalkan pesanan</button>
+                    </form>
+                @endif
             </div>
 
             <section class="rounded-2xl border border-[#e8ecf6] bg-white p-4 shadow-[0_5px_18px_rgba(29,48,99,0.05)] sm:p-6" aria-labelledby="tracking-title">
@@ -139,6 +147,12 @@
                             <span class="font-semibold text-slate-600">Subtotal produk</span>
                             <span class="font-semibold text-[#202a3b]">Rp{{ number_format($order->items->sum(fn ($item) => $item->quantity * $item->price_snapshot), 0, ',', '.') }}</span>
                         </div>
+                        @if ($order->discount_amount > 0)
+                            <div class="flex items-center justify-between gap-3 text-[11px] text-emerald-700">
+                                <span class="font-semibold">Diskon pembelian pertama</span>
+                                <span class="font-semibold">−Rp{{ number_format($order->discount_amount, 0, ',', '.') }}</span>
+                            </div>
+                        @endif
                         <div class="flex items-center justify-between gap-3 text-[11px]">
                             <span class="font-semibold text-slate-600">Biaya pengantaran</span>
                             <span class="font-semibold text-[#202a3b]">Rp{{ number_format($order->delivery_fee, 0, ',', '.') }}</span>
@@ -153,15 +167,23 @@
                 <aside class="space-y-4">
                     <section class="rounded-2xl border border-[#e8ecf6] bg-white p-4 shadow-[0_4px_14px_rgba(29,48,99,0.04)]" aria-labelledby="delivery-address-title">
                         <h2 id="delivery-address-title" class="text-xs font-bold text-[#202a3b]">Alamat pengantaran</h2>
-                        <p class="mt-2 text-[11px] font-semibold text-slate-700">{{ $order->address->label ?: 'Alamat pengantaran' }}</p>
-                        <p class="mt-1 text-[10px] leading-5 text-slate-600">{{ $order->address->full_address }}</p>
+                        <p class="mt-2 text-[11px] font-semibold text-slate-700">{{ $order->delivery_address_label ?: 'Alamat pengantaran' }}</p>
+                        <p class="mt-1 text-[10px] leading-5 text-slate-600">{{ $order->delivery_address }}</p>
+                        @if ($order->delivery_service_zone_name)
+                            <p class="mt-1 text-[10px] font-semibold text-[#31569e]">{{ $order->delivery_service_zone_name }} · {{ $order->delivery_service_zone_area }}</p>
+                        @endif
                     </section>
 
                     <section class="rounded-2xl border border-[#e8ecf6] bg-white p-4 shadow-[0_4px_14px_rgba(29,48,99,0.04)]" aria-labelledby="payment-method-title">
                         <h2 id="payment-method-title" class="text-xs font-bold text-[#202a3b]">Metode pembayaran</h2>
                         <p class="mt-2 text-[11px] font-semibold text-slate-700">{{ $order->payment_method === 'cod' ? 'COD — Bayar saat diterima' : 'Transfer bank' }}</p>
-                        @php($paymentStatusLabels = ['unpaid' => 'Belum dibayar', 'pending_verification' => 'Menunggu verifikasi admin', 'rejected' => 'Bukti ditolak — unggah ulang bukti', 'paid' => 'Pembayaran terverifikasi'])
+                        @php($paymentStatusLabels = ['unpaid' => 'Belum dibayar', 'pending_verification' => 'Menunggu verifikasi admin', 'rejected' => 'Bukti ditolak — unggah ulang bukti', 'paid' => 'Pembayaran terverifikasi', 'cancelled' => 'Pesanan dibatalkan'])
                         <p class="mt-1 text-[10px] font-semibold {{ $order->payment_status === 'paid' ? 'text-emerald-700' : ($order->payment_status === 'rejected' ? 'text-rose-700' : 'text-amber-700') }}">{{ $paymentStatusLabels[$order->payment_status] ?? $order->payment_status }}</p>
+                        @if ($order->refund_status === 'pending')
+                            <p class="mt-2 rounded-lg bg-amber-50 p-2 text-[10px] leading-5 text-amber-800">Pengembalian dana menunggu diproses admin.</p>
+                        @elseif ($order->refund_status === 'refunded')
+                            <p class="mt-2 rounded-lg bg-emerald-50 p-2 text-[10px] leading-5 text-emerald-800">Pengembalian dana telah diproses. Referensi: {{ $order->refund_reference }}</p>
+                        @endif
                         @if ($order->payment_method === 'bank_transfer')
                             @php($bankTransfer = config('payments.bank_transfer'))
                             @if (filled($bankTransfer['bank_name']) && filled($bankTransfer['account_name']) && filled($bankTransfer['account_number']))
@@ -175,8 +197,11 @@
                                 <p class="mt-3 rounded-lg {{ $order->payment_status === 'rejected' ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800' }} p-3 text-[10px] leading-5"><span class="font-bold">Catatan admin:</span> {{ $order->payment_review_note }}</p>
                             @endif
                             @if ($order->payment_status === 'pending_verification')
-                                <p class="mt-3 text-[10px] leading-5 text-slate-500">Bukti dikirim {{ $order->payment_submitted_at?->timezone(config('app.display_timezone'))->format('d M Y, H:i') }}. Admin sedang meninjau pembayaran.</p>
+                                <p class="mt-3 text-[10px] leading-5 text-slate-500">Bukti dikirim {{ $order->payment_submitted_at?->timezone(config('app.display_timezone'))->format('d M Y, H:i') }}. Admin sedang meninjau pembayaran dan stok pesanan tetap ditahan selama proses verifikasi.</p>
                             @elseif (in_array($order->payment_status, ['unpaid', 'rejected'], true) && ! in_array($order->status, ['cancelled', 'delivered'], true))
+                                @if ($order->payment_deadline_at)
+                                    <p class="mt-3 rounded-lg bg-amber-50 p-3 text-[10px] leading-5 text-amber-800">Selesaikan pembayaran sebelum {{ $order->payment_deadline_at->timezone(config('app.display_timezone'))->format('d M Y, H:i') }}. Jika melewati batas waktu, pesanan dibatalkan dan stok dikembalikan.</p>
+                                @endif
                                 <form method="POST" action="{{ route('user.orders.payment-proof', $order) }}" enctype="multipart/form-data" class="mt-4 space-y-3">
                                     @csrf
                                     <div>

@@ -89,6 +89,9 @@ class CheckoutTest extends TestCase
             ->assertSee('value="'.$zone->id.'"', false)
             ->assertSee('Galon Aqua')
             ->assertSee('Rp42.000')
+            ->assertSee('Diskon pembelian pertama (20%)')
+            ->assertSee('Hak diskon baru terpakai setelah pesanan selesai diantar')
+            ->assertSee('data-order-discount="8400"', false)
             ->assertSee('Biaya pengantaran')
             ->assertSee('Hitung...')
             ->assertSee('data-shipping-quote-url', false)
@@ -253,7 +256,8 @@ class CheckoutTest extends TestCase
 
         $this->assertSame($user->id, $order->user_id);
         $this->assertSame($address->id, $order->address_id);
-        $this->assertSame(47500, $order->total_price);
+        $this->assertSame(39100, $order->total_price);
+        $this->assertSame(8400, $order->discount_amount);
         $this->assertSame(5500, $order->delivery_fee);
         $this->assertSame('cod', $order->payment_method);
         $this->assertSame('Hubungi saat tiba.', $order->notes);
@@ -319,6 +323,10 @@ class CheckoutTest extends TestCase
 
         $this->assertSame('bank_transfer', Order::sole()->payment_method);
         $this->assertSame('unpaid', Order::sole()->payment_status);
+        $this->assertEquals(
+            Order::sole()->ordered_at->copy()->addHours(24)->timestamp,
+            Order::sole()->payment_deadline_at->timestamp,
+        );
         $this->assertSame(1, Order::sole()->items()->count());
     }
 
@@ -363,7 +371,207 @@ class CheckoutTest extends TestCase
         $order = Order::sole();
 
         $this->assertSame(8500, $order->delivery_fee);
-        $this->assertSame(29500, $order->total_price);
+        $this->assertSame(25300, $order->total_price);
+        $this->assertSame(4200, $order->discount_amount);
+    }
+
+    public function test_cancelled_orders_do_not_consume_first_purchase_discount(): void
+    {
+        $user = User::factory()->create();
+        $address = $this->createAddress($user);
+        $product = $this->createProduct();
+        Order::create([
+            'user_id' => $user->id,
+            'address_id' => $address->id,
+            'status' => 'cancelled',
+            'total_price' => 26000,
+            'discount_amount' => 4200,
+            'delivery_fee' => 5000,
+            'payment_method' => 'cod',
+            'payment_status' => 'unpaid',
+        ]);
+
+        $this->actingAs($user)
+            ->withSession(['cart' => [$product->id => 1]])
+            ->post(route('user.checkout.store'), [
+                'address_id' => $address->id,
+                'payment_method' => 'cod',
+            ])
+            ->assertRedirect(route('user.orders.index'));
+
+        $order = Order::latest('id')->firstOrFail();
+        $this->assertSame(4200, $order->discount_amount);
+        $this->assertSame(22300, $order->total_price);
+    }
+
+    public function test_active_orders_reserve_first_purchase_promo_and_cancellation_returns_right(): void
+    {
+        $user = User::factory()->create();
+        $address = $this->createAddress($user);
+        $product = $this->createProduct();
+        $promoOrder = Order::create([
+            'user_id' => $user->id,
+            'address_id' => $address->id,
+            'status' => 'pending',
+            'total_price' => 21800,
+            'discount_amount' => 4200,
+            'delivery_fee' => 5000,
+            'payment_method' => 'cod',
+            'payment_status' => 'unpaid',
+        ]);
+
+        $this->actingAs($user)
+            ->withSession(['cart' => [$product->id => 1]])
+            ->post(route('user.checkout.store'), [
+                'address_id' => $address->id,
+                'payment_method' => 'cod',
+            ])
+            ->assertRedirect(route('user.orders.index'));
+
+        $secondOrder = Order::latest('id')->firstOrFail();
+        $this->assertSame(0, $secondOrder->discount_amount);
+
+        $promoOrder->update(['status' => 'cancelled']);
+        $secondOrder->update(['status' => 'cancelled']);
+        $this->withSession(['cart' => [$product->id => 1]])
+            ->post(route('user.checkout.store'), [
+                'address_id' => $address->id,
+                'payment_method' => 'cod',
+            ])
+            ->assertRedirect(route('user.orders.index'));
+
+        $thirdOrder = Order::latest('id')->firstOrFail();
+        $this->assertSame(4200, $thirdOrder->discount_amount);
+    }
+
+    public function test_uncompleted_order_holds_promo_but_completed_order_consumes_it(): void
+    {
+        $user = User::factory()->create();
+        $address = $this->createAddress($user);
+        $product = $this->createProduct();
+        $order = Order::create([
+            'user_id' => $user->id,
+            'address_id' => $address->id,
+            'status' => 'pending',
+            'total_price' => 26000,
+            'delivery_fee' => 5000,
+            'payment_method' => 'cod',
+            'payment_status' => 'unpaid',
+        ]);
+
+        $this->actingAs($user)
+            ->withSession(['cart' => [$product->id => 1]])
+            ->get(route('user.checkout.index'))
+            ->assertOk()
+            ->assertSee('data-order-discount="0"', false)
+            ->assertSee('Hak promo ditahan selama ada pesanan yang belum selesai');
+
+        $order->update(['status' => 'delivered']);
+
+        $this->withSession(['cart' => [$product->id => 1]])
+            ->get(route('user.checkout.index'))
+            ->assertOk()
+            ->assertSee('data-order-discount="0"', false)
+            ->assertSee('Promo pembelian pertama sudah digunakan setelah pesanan sebelumnya selesai diantar.');
+    }
+
+    public function test_checkout_does_not_apply_first_purchase_discount_to_returning_customers(): void
+    {
+        $user = User::factory()->create();
+        $address = $this->createAddress($user);
+        $product = $this->createProduct();
+        Order::create([
+            'user_id' => $user->id,
+            'address_id' => $address->id,
+            'status' => 'delivered',
+            'total_price' => 26000,
+            'delivery_fee' => 5000,
+            'payment_method' => 'cod',
+            'payment_status' => 'paid',
+        ]);
+
+        $this->actingAs($user)
+            ->withSession(['cart' => [$product->id => 1]])
+            ->post(route('user.checkout.store'), [
+                'address_id' => $address->id,
+                'payment_method' => 'cod',
+            ])
+            ->assertRedirect(route('user.orders.index'));
+
+        $order = Order::latest('id')->firstOrFail();
+        $this->assertSame(0, $order->discount_amount);
+        $this->assertSame(26500, $order->total_price);
+    }
+
+    public function test_customer_can_cancel_before_dispatch_and_restore_stock_without_changing_order_address(): void
+    {
+        $user = User::factory()->create();
+        $product = $this->createProduct(['stock' => 8]);
+        $address = $this->createAddress($user);
+
+        $this->actingAs($user)
+            ->withSession(['cart' => [$product->id => 2]])
+            ->post(route('user.checkout.store'), [
+                'address_id' => $address->id,
+                'payment_method' => 'cod',
+            ])
+            ->assertRedirect(route('user.orders.index'));
+
+        $order = Order::with('delivery')->sole();
+        $this->assertSame(6, $product->fresh()->stock);
+        $this->assertSame('Rumah', $order->delivery_address_label);
+        $this->assertSame('Jl. Gunung Anyar No. 10, Surabaya', $order->delivery_address);
+        $this->assertSame(-7.35, (float) $order->delivery_latitude);
+
+        $address->update([
+            'label' => 'Rumah baru',
+            'full_address' => 'Alamat yang diperbarui',
+            'latitude' => -7.36,
+            'longitude' => 112.78,
+        ]);
+        $order->refresh();
+        $this->assertSame('Jl. Gunung Anyar No. 10, Surabaya', $order->delivery_address);
+        $this->assertSame(-7.35, (float) $order->delivery_latitude);
+
+        $this->post(route('user.orders.cancel', $order), ['reason' => 'Salah memilih jumlah'])
+            ->assertRedirect(route('user.orders.show', $order))
+            ->assertSessionHas('success', 'Pesanan berhasil dibatalkan dan stok telah dikembalikan.');
+
+        $this->assertSame('cancelled', $order->fresh()->status);
+        $this->assertSame('cancelled', $order->fresh()->payment_status);
+        $this->assertSame('Salah memilih jumlah', $order->fresh()->cancellation_reason);
+        $this->assertNotNull($order->fresh()->stock_restored_at);
+        $this->assertSame(8, $product->fresh()->stock);
+        $this->assertSame('failed', $order->delivery->fresh()->status);
+
+        $this->post(route('user.orders.cancel', $order), [])
+            ->assertSessionHasErrors('order');
+        $this->assertSame(8, $product->fresh()->stock);
+    }
+
+    public function test_customer_cannot_cancel_after_the_courier_starts_delivery(): void
+    {
+        $user = User::factory()->create();
+        $product = $this->createProduct(['stock' => 8]);
+        $address = $this->createAddress($user);
+
+        $this->actingAs($user)
+            ->withSession(['cart' => [$product->id => 1]])
+            ->post(route('user.checkout.store'), [
+                'address_id' => $address->id,
+                'payment_method' => 'cod',
+            ])
+            ->assertRedirect(route('user.orders.index'));
+
+        $order = Order::with('delivery')->sole();
+        $order->update(['status' => 'processing']);
+        $order->delivery->update(['status' => 'in_transit']);
+
+        $this->post(route('user.orders.cancel', $order), [])
+            ->assertSessionHasErrors('order');
+
+        $this->assertSame('processing', $order->fresh()->status);
+        $this->assertSame(7, $product->fresh()->stock);
     }
 
     public function test_checkout_shipping_quote_uses_round_trip_distance_and_smallest_suitable_vehicle(): void

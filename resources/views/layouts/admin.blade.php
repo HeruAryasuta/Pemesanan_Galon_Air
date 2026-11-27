@@ -48,6 +48,9 @@
                             @case('Kurir')
                                 <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none"><path d="M2 5.5h9.5v8H2zM11.5 8h3.2l3.3 3v2.5h-6.5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="5.2" cy="14.5" r="1.7" fill="white" stroke="currentColor" stroke-width="1.5"/><circle cx="14.8" cy="14.5" r="1.7" fill="white" stroke="currentColor" stroke-width="1.5"/></svg>
                                 @break
+                            @case('Pengajuan Kurir')
+                                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none"><path d="M6 2.5h5.5l4 4v10A1.5 1.5 0 0 1 14 18H6a1.5 1.5 0 0 1-1.5-1.5v-12A2 2 0 0 1 6.5 2.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M11 2.8V7h4.2M7.5 10.2a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0Zm-1 4.3a2.5 2.5 0 0 1 5 0m1.5-3 1 1 2-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                @break
                             @case('Optimasi Rute')
                                 <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none"><path d="M5 3v5a2 2 0 0 0 2 2h6a2 2 0 0 1 2 2v5M5 3l-2 2m2-2 2 2m8 12-2-2m2 2 2-2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="5" cy="3" r="1.5" fill="currentColor"/><circle cx="15" cy="17" r="1.5" fill="currentColor"/></svg>
                                 @break

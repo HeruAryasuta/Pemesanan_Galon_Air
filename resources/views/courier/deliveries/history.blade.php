@@ -20,7 +20,7 @@
                 <article class="flex flex-wrap items-center justify-between gap-4 border-b border-[#edf0f7] px-4 py-4 last:border-b-0 sm:px-5">
                     <div>
                         <p class="text-xs font-bold text-[#202a3b]">Pesanan #{{ $delivery->order->id }} · {{ $delivery->order->user->name }}</p>
-                        <p class="mt-1 text-[10px] text-slate-500">{{ $delivery->delivered_at?->timezone(config('app.display_timezone'))->format('d M Y, H:i') }} · {{ $delivery->order->address?->full_address ?? 'Alamat tidak tersedia' }}</p>
+                        <p class="mt-1 text-[10px] text-slate-500">{{ $delivery->delivered_at?->timezone(config('app.display_timezone'))->format('d M Y, H:i') }} · {{ $delivery->order->delivery_address ?? 'Alamat tidak tersedia' }}</p>
                     </div>
                     <div class="flex items-center gap-3">
                         <span class="text-xs font-extrabold text-[#09296d]">Rp{{ number_format($delivery->order->total_price, 0, ',', '.') }}</span>

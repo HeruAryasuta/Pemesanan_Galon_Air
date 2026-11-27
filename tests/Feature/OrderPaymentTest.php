@@ -3,10 +3,14 @@
 namespace Tests\Feature;
 
 use App\Models\Address;
+use App\Models\Category;
 use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -99,6 +103,59 @@ class OrderPaymentTest extends TestCase
             ->assertSessionHasErrors('payment_proof');
     }
 
+    public function test_expired_unpaid_transfer_is_cancelled_and_stock_is_restored_once(): void
+    {
+        [, $order] = $this->createTransferOrder([
+            'payment_deadline_at' => now()->subMinute(),
+        ]);
+        $product = $this->createReservedStockItem($order);
+
+        Artisan::call('orders:expire-unpaid-bank-transfers');
+
+        $order->refresh();
+        $this->assertSame('cancelled', $order->status);
+        $this->assertSame('cancelled', $order->payment_status);
+        $this->assertNotNull($order->stock_restored_at);
+        $this->assertSame('Batas waktu pembayaran transfer telah berakhir.', $order->cancellation_reason);
+        $this->assertSame(6, $product->fresh()->stock);
+
+        Artisan::call('orders:expire-unpaid-bank-transfers');
+
+        $this->assertSame(6, $product->fresh()->stock);
+    }
+
+    public function test_transfer_with_proof_pending_review_is_not_expired_or_restocked(): void
+    {
+        [, $order] = $this->createTransferOrder([
+            'payment_status' => 'pending_verification',
+            'payment_deadline_at' => now()->subMinute(),
+        ]);
+        $product = $this->createReservedStockItem($order);
+
+        Artisan::call('orders:expire-unpaid-bank-transfers');
+
+        $this->assertSame('pending', $order->fresh()->status);
+        $this->assertSame('pending_verification', $order->fresh()->payment_status);
+        $this->assertNull($order->fresh()->stock_restored_at);
+        $this->assertSame(4, $product->fresh()->stock);
+    }
+
+    public function test_late_proof_upload_expires_order_and_restores_stock(): void
+    {
+        Storage::fake('local');
+        [$customer, $order] = $this->createTransferOrder([
+            'payment_deadline_at' => now()->subMinute(),
+        ]);
+        $product = $this->createReservedStockItem($order);
+
+        $this->actingAs($customer)
+            ->post(route('user.orders.payment-proof', $order), ['payment_proof' => $this->proofImage()])
+            ->assertSessionHasErrors('payment_proof');
+
+        $this->assertSame('cancelled', $order->fresh()->status);
+        $this->assertSame(6, $product->fresh()->stock);
+    }
+
     public function test_customer_upload_is_limited_to_supported_files_and_five_megabytes(): void
     {
         Storage::fake('local');
@@ -134,9 +191,35 @@ class OrderPaymentTest extends TestCase
             'payment_method' => 'bank_transfer',
             'payment_status' => 'unpaid',
             'ordered_at' => now(),
+            'payment_deadline_at' => now()->addHours((int) config('payments.bank_transfer.deadline_hours', 24)),
         ], $attributes));
 
         return [$customer, $order];
+    }
+
+    private function createReservedStockItem(Order $order): Product
+    {
+        $category = Category::create([
+            'name' => 'Air Galon',
+            'slug' => 'air-galon',
+        ]);
+        $product = Product::create([
+            'category_id' => $category->id,
+            'name' => 'Galon Aqua',
+            'slug' => 'galon-aqua',
+            'price' => 21000,
+            'stock' => 4,
+            'unit' => 'galon',
+            'is_active' => true,
+        ]);
+        OrderItem::create([
+            'order_id' => $order->id,
+            'product_id' => $product->id,
+            'quantity' => 2,
+            'price_snapshot' => 21000,
+        ]);
+
+        return $product;
     }
 
     private function proofImage(): UploadedFile

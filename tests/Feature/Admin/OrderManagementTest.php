@@ -9,6 +9,8 @@ use App\Models\Delivery;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Models\Route;
+use App\Models\RouteStop;
 use App\Models\ServiceZone;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -98,6 +100,90 @@ class OrderManagementTest extends TestCase
         $this->assertSame('delivered', $order->fresh()->status);
         $this->assertSame('delivered', $order->delivery->fresh()->status);
         $this->assertNotNull($order->delivery->fresh()->delivered_at);
+        $this->assertTrue($courier->fresh()->is_available);
+    }
+
+    public function test_admin_cannot_skip_order_status_transitions(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        [, $order] = $this->createOrder();
+
+        $this->actingAs($admin)
+            ->put(route('admin.orders.update', $order), ['status' => 'delivered'])
+            ->assertRedirect()
+            ->assertSessionHas('error', 'Perubahan status pesanan tidak sesuai urutan proses.');
+
+        $this->assertSame('pending', $order->fresh()->status);
+    }
+
+    public function test_admin_cancellation_of_paid_transfer_tracks_and_records_manual_refund(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        [, $order] = $this->createOrder([
+            'payment_method' => 'bank_transfer',
+            'payment_status' => 'paid',
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.orders.cancel', $order), ['reason' => 'Pelanggan meminta pembatalan'])
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Pesanan dibatalkan. Pengembalian dana menunggu diproses oleh admin.');
+
+        $this->assertSame('pending', $order->fresh()->refund_status);
+        $this->assertSame('paid', $order->fresh()->payment_status);
+
+        $this->post(route('admin.orders.refund', $order), [
+            'reference' => 'REFUND-123',
+            'note' => 'Ditransfer kembali ke rekening pelanggan.',
+        ])
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Pengembalian dana berhasil dicatat.');
+
+        $this->assertSame('refunded', $order->fresh()->refund_status);
+        $this->assertSame('REFUND-123', $order->fresh()->refund_reference);
+        $this->assertSame($admin->id, $order->fresh()->refund_processed_by);
+        $this->assertNotNull($order->fresh()->refunded_at);
+    }
+
+    public function test_cancelling_a_planned_route_unassigns_its_other_deliveries_for_rescheduling(): void
+    {
+        [$customer, $order] = $this->createOrder(['status' => 'confirmed']);
+        [, $otherOrder] = $this->createOrder(['status' => 'confirmed']);
+        $courier = Courier::create([
+            'name' => 'Kurir Rute',
+            'phone' => '081234567890',
+            'vehicle_type' => 'Truck',
+            'service_zone_id' => ServiceZone::query()->where('code', 'WIL-05')->value('id'),
+            'is_available' => false,
+        ]);
+        $route = Route::create([
+            'courier_id' => $courier->id,
+            'route_date' => now()->toDateString(),
+            'status' => 'planned',
+        ]);
+
+        foreach ([$order, $otherOrder] as $index => $routedOrder) {
+            $routedOrder->delivery()->update([
+                'courier_id' => $courier->id,
+                'status' => 'assigned',
+            ]);
+            RouteStop::create([
+                'route_id' => $route->id,
+                'delivery_id' => $routedOrder->delivery->id,
+                'visit_order' => $index + 1,
+            ]);
+        }
+
+        $this->actingAs($customer)
+            ->post(route('user.orders.cancel', $order))
+            ->assertRedirect(route('user.orders.show', $order))
+            ->assertSessionHas('success', 'Pesanan berhasil dibatalkan dan stok telah dikembalikan.');
+
+        $this->assertDatabaseMissing('routes', ['id' => $route->id]);
+        $this->assertSame('failed', $order->delivery->fresh()->status);
+        $this->assertNull($order->delivery->fresh()->courier_id);
+        $this->assertSame('pending', $otherOrder->delivery->fresh()->status);
+        $this->assertNull($otherOrder->delivery->fresh()->courier_id);
         $this->assertTrue($courier->fresh()->is_available);
     }
 

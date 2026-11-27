@@ -142,8 +142,8 @@
                                         <span class="truncate text-[10px] font-bold text-[#202a3b]">ORD-{{ $delivery->order->id }} · {{ $delivery->order->user->name }}</span>
                                         <span class="shrink-0 rounded-full bg-[#e8efff] px-1.5 py-0.5 text-[8px] font-semibold text-[#31569e]">{{ $delivery->order->items->first()?->product?->category?->name ?? 'Pesanan' }}</span>
                                     </span>
-                                    <span class="mt-1 block truncate text-[9px] leading-4 text-slate-500">{{ $delivery->order->address->full_address }}</span>
-                                    <span class="mt-1 block text-[8px] text-slate-400">{{ number_format((float) $delivery->order->address->latitude, 5, ',', '.') }}, {{ number_format((float) $delivery->order->address->longitude, 5, ',', '.') }}</span>
+                                    <span class="mt-1 block truncate text-[9px] leading-4 text-slate-500">{{ $delivery->order->delivery_address }}</span>
+                                    <span class="mt-1 block text-[8px] text-slate-400">{{ number_format((float) $delivery->order->delivery_latitude, 5, ',', '.') }}, {{ number_format((float) $delivery->order->delivery_longitude, 5, ',', '.') }}</span>
                                 </span>
                             </label>
                         @endforeach

@@ -94,7 +94,7 @@ class DeliveryController extends Controller
 
             if ($validated['status'] === 'in_transit') {
                 abort_unless($lockedDelivery->status === 'assigned', 422, 'Pengantaran ini tidak dapat dimulai dari status saat ini.');
-                abort_unless(! in_array($order->status, ['cancelled', 'delivered'], true), 422, 'Pesanan ini sudah ditutup.');
+                abort_unless(in_array($order->status, ['pending', 'confirmed'], true), 422, 'Pesanan ini sudah ditutup atau tidak siap diantar.');
 
                 $lockedDelivery->update(['status' => 'in_transit']);
                 $order->update(['status' => 'processing']);

@@ -63,8 +63,8 @@
                             <div class="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-[#edf0f7] pt-3">
                                 <div class="max-w-lg">
                                     <p class="text-[9px] font-bold uppercase tracking-[0.08em] text-slate-500">Alamat pengantaran</p>
-                                    <p class="mt-1 text-[10px] leading-5 text-slate-600">{{ $order->address->label ?: 'Alamat pengantaran' }} — {{ $order->address->full_address }}</p>
-                                    @php($paymentLabels = ['unpaid' => 'Belum dibayar', 'pending_verification' => 'Menunggu verifikasi', 'rejected' => 'Bukti ditolak', 'paid' => 'Lunas'])
+                                    <p class="mt-1 text-[10px] leading-5 text-slate-600">{{ $order->delivery_address_label ?: 'Alamat pengantaran' }} — {{ $order->delivery_address }}</p>
+                                    @php($paymentLabels = ['unpaid' => 'Belum dibayar', 'pending_verification' => 'Menunggu verifikasi', 'rejected' => 'Bukti ditolak', 'paid' => 'Lunas', 'cancelled' => 'Pesanan dibatalkan'])
                                     <p class="mt-1 text-[10px] text-slate-600">Pembayaran: {{ $order->payment_method === 'cod' ? 'COD — Bayar saat diterima' : 'Transfer bank' }} · {{ $paymentLabels[$order->payment_status] ?? $order->payment_status }}</p>
                                     @if ($order->notes)
                                         <p class="mt-2 text-[10px] leading-5 text-slate-600"><span class="font-semibold">Catatan:</span> {{ $order->notes }}</p>

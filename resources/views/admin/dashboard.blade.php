@@ -176,7 +176,7 @@
                                 <td class="px-4 py-3.5">
                                     <span class="whitespace-nowrap rounded-full px-2 py-1 text-[9px] font-bold {{ $statusClasses[$order->status] ?? 'bg-slate-100 text-slate-700' }}">{{ ['pending' => 'Menunggu', 'confirmed' => 'Dikonfirmasi', 'processing' => 'Dalam pengantaran', 'delivered' => 'Selesai', 'cancelled' => 'Dibatalkan'][$order->status] ?? $order->status }}</span>
                                 </td>
-                                @php($paymentLabels = ['unpaid' => 'Belum dibayar', 'pending_verification' => 'Menunggu verifikasi', 'rejected' => 'Bukti ditolak', 'paid' => 'Lunas'])
+                                @php($paymentLabels = ['unpaid' => 'Belum dibayar', 'pending_verification' => 'Menunggu verifikasi', 'rejected' => 'Bukti ditolak', 'paid' => 'Lunas', 'cancelled' => 'Pesanan dibatalkan'])
                                 <td class="whitespace-nowrap px-4 py-3.5 text-right text-slate-600">{{ $paymentLabels[$order->payment_status] ?? $order->payment_status }}</td>
                                 <td class="whitespace-nowrap px-4 py-3.5 text-right font-semibold text-slate-700">
                                     <a href="{{ route('admin.orders.show', $order) }}" class="hover:text-[#173c91]">Rp{{ number_format($order->total_price, 0, ',', '.') }}</a>

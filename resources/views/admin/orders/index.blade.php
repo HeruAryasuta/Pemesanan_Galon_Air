@@ -57,7 +57,7 @@
                                 </td>
                                 <td class="px-4 py-4">
                                     <p class="text-xs font-semibold">{{ $order->payment_method === 'cod' ? 'COD' : $order->payment_method }}</p>
-                                    @php($paymentLabels = ['unpaid' => 'Belum dibayar', 'pending_verification' => 'Menunggu verifikasi', 'rejected' => 'Bukti ditolak', 'paid' => 'Lunas'])
+                                    @php($paymentLabels = ['unpaid' => 'Belum dibayar', 'pending_verification' => 'Menunggu verifikasi', 'rejected' => 'Bukti ditolak', 'paid' => 'Lunas', 'cancelled' => 'Pesanan dibatalkan'])
                                     <p class="mt-1 text-[10px] {{ $order->payment_status === 'paid' ? 'font-bold text-emerald-700' : ($order->payment_status === 'rejected' ? 'font-bold text-rose-700' : 'text-amber-700') }}">{{ $paymentLabels[$order->payment_status] ?? $order->payment_status }}</p>
                                 </td>
                                 <td class="px-4 py-4 text-right font-extrabold text-[#09296d]">Rp{{ number_format($order->total_price, 0, ',', '.') }}</td>

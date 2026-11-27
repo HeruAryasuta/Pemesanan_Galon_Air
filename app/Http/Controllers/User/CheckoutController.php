@@ -9,6 +9,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ServiceZone;
+use App\Models\User;
 use App\Services\DeliveryFeeCalculator;
 use App\Support\ServiceZoneMatcher;
 use Illuminate\Http\JsonResponse;
@@ -21,6 +22,8 @@ use Illuminate\View\View;
 
 class CheckoutController extends Controller
 {
+    private const FIRST_PURCHASE_DISCOUNT_PERCENT = 20;
+
     public function index(Request $request, ServiceZoneMatcher $serviceZoneMatcher): View|RedirectResponse
     {
         $cart = session('cart', []);
@@ -57,6 +60,15 @@ class CheckoutController extends Controller
         $cartHasUnavailableItems = $products->contains(
             fn (Product $product) => ! $product->is_active || $product->stock < $cart[$product->id]
         );
+        $hasCompletedPurchase = $request->user()->orders()->where('status', 'delivered')->exists();
+        $hasUncompletedOrder = $request->user()->orders()
+            ->whereNotIn('status', ['cancelled', 'delivered'])
+            ->exists();
+        $firstPurchaseDiscountAvailable = ! $hasCompletedPurchase && ! $hasUncompletedOrder;
+        $discountAmount = $firstPurchaseDiscountAvailable
+            ? $this->calculateFirstPurchaseDiscount($products->sum(fn (Product $product) => $product->price * $cart[$product->id]))
+            : 0;
+        $firstPurchaseDiscountPercent = self::FIRST_PURCHASE_DISCOUNT_PERCENT;
 
         return view('user.checkout.index', compact(
             'products',
@@ -64,6 +76,11 @@ class CheckoutController extends Controller
             'addresses',
             'serviceZones',
             'cartHasUnavailableItems',
+            'discountAmount',
+            'firstPurchaseDiscountPercent',
+            'firstPurchaseDiscountAvailable',
+            'hasCompletedPurchase',
+            'hasUncompletedOrder',
             'bankTransfer',
             'bankTransferConfigured',
         ));
@@ -182,7 +199,9 @@ class CheckoutController extends Controller
         }
 
         try {
-            $order = DB::transaction(function () use ($request, $validated, $cart, $address, $isNewAddress, $serviceZoneId, $deliveryQuote) {
+            $order = DB::transaction(function () use ($request, $validated, $cart, $address, $isNewAddress, $serviceZoneId, $deliveryQuote, $deliveryLatitude, $deliveryLongitude) {
+                $customer = User::query()->lockForUpdate()->findOrFail($request->user()->id);
+
                 if ($isNewAddress) {
                     $saveAddress = (bool) ($validated['save_address'] ?? false);
 
@@ -210,6 +229,13 @@ class CheckoutController extends Controller
                         $orderAddress->service_zone_id = $serviceZoneId;
                         $orderAddress->save();
                     }
+
+                    if (
+                        (float) $orderAddress->latitude !== (float) $deliveryLatitude
+                        || (float) $orderAddress->longitude !== (float) $deliveryLongitude
+                    ) {
+                        throw new \RuntimeException('Alamat berubah saat checkout. Muat ulang checkout untuk menghitung ongkir kembali.');
+                    }
                 }
 
                 $products = Product::whereIn('id', array_keys($cart))->lockForUpdate()->get();
@@ -230,16 +256,32 @@ class CheckoutController extends Controller
                 }
 
                 $deliveryFee = $deliveryQuote['delivery_fee'];
+                $discountAmount = $this->canUseFirstPurchaseDiscount($customer)
+                    ? $this->calculateFirstPurchaseDiscount($subtotal)
+                    : 0;
+                $serviceZone = ServiceZone::query()->findOrFail($serviceZoneId);
+                $orderedAt = now();
                 $order = Order::create([
                     'user_id' => $request->user()->id,
                     'address_id' => $orderAddress->id,
                     'status' => 'pending',
-                    'total_price' => $subtotal + $deliveryFee,
+                    'total_price' => $subtotal - $discountAmount + $deliveryFee,
+                    'discount_amount' => $discountAmount,
+                    'order_address_label' => $orderAddress->label,
+                    'order_address_text' => $orderAddress->full_address,
+                    'order_latitude' => $deliveryLatitude,
+                    'order_longitude' => $deliveryLongitude,
+                    'order_service_zone_id' => $serviceZone->id,
+                    'order_service_zone_name' => $serviceZone->name,
+                    'order_service_zone_area' => $serviceZone->area_description,
                     'delivery_fee' => $deliveryFee,
                     'payment_method' => $validated['payment_method'],
                     'payment_status' => 'unpaid',
+                    'payment_deadline_at' => $validated['payment_method'] === 'bank_transfer'
+                        ? $orderedAt->copy()->addHours((int) config('payments.bank_transfer.deadline_hours', 24))
+                        : null,
                     'notes' => $validated['notes'] ?? null,
-                    'ordered_at' => now(),
+                    'ordered_at' => $orderedAt,
                 ]);
 
                 foreach ($products as $product) {
@@ -282,5 +324,17 @@ class CheckoutController extends Controller
         return filled($bankTransfer['bank_name'])
             && filled($bankTransfer['account_name'])
             && filled($bankTransfer['account_number']);
+    }
+
+    private function calculateFirstPurchaseDiscount(int $subtotal): int
+    {
+        return intdiv($subtotal * self::FIRST_PURCHASE_DISCOUNT_PERCENT, 100);
+    }
+
+    private function canUseFirstPurchaseDiscount(User $customer): bool
+    {
+        return ! $customer->orders()->where('status', 'delivered')->exists()
+            && ! $customer->orders()->whereNotIn('status', ['cancelled', 'delivered'])
+                ->exists();
     }
 }

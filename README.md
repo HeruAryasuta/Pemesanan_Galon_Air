@@ -55,6 +55,12 @@ Ongkos kirim dihitung dari jarak jalan pulang-pergi depo menggunakan OSRM, dibul
 
 Pelanggan memilih wilayah pada alamat pengantaran: Wilayah 1 (Waru/Wadung Asri), Wilayah 2 (Gedangan), Wilayah 3 (Sedati), Wilayah 4 (Rungkut), Wilayah 5 (Gunung Anyar), atau Wilayah 6 (Sukolilo). Admin menetapkan setiap kurir ke satu wilayah. Setiap wilayah memiliki satu slot kurir awal; slot tambahan dapat ditambahkan dari halaman **Kelola Kurir**. Alamat lama yang belum memiliki wilayah perlu diperbarui sebelum pesanannya dapat ditugaskan atau dimasukkan ke rute.
 
+### Batas waktu pembayaran transfer
+
+Pesanan transfer harus dibayar dalam 24 jam sejak dibuat secara default. Atur `PAYMENT_BANK_TRANSFER_DEADLINE_HOURS` di `.env` untuk mengubah durasi. Jika tenggat habis tanpa bukti pembayaran, pesanan dibatalkan dan stok yang ditahan saat checkout dikembalikan. Bukti yang dikirim sebelum tenggat tetap mempertahankan stok selama admin melakukan verifikasi; jika bukti ditolak setelah tenggat, pesanan akan kedaluwarsa.
+
+Jalankan `php artisan schedule:work` selama pengembangan agar pemeriksaan kedaluwarsa berjalan setiap menit. Di server, pastikan Laravel Scheduler dipanggil setiap menit. Pemeriksaan juga dapat dijalankan manual dengan `php artisan orders:expire-unpaid-bank-transfers`.
+
 ## Menyiapkan data demo
 
 Seeder katalog produk dapat dijalankan secara terpisah dan tidak menimpa produk yang sudah ada:

@@ -71,6 +71,7 @@ Route::middleware('auth')->name('user.')->group(function () {
 
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
+    Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
     Route::post('/orders/{order}/payment-proof', [OrderPaymentController::class, 'store'])->name('orders.payment-proof');
 
     Route::get('/addresses', [AddressController::class, 'index'])->name('addresses.index');
@@ -101,6 +102,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(fun
     Route::patch('/products/{product}/toggle-active', [AdminProductController::class, 'toggleActive'])->name('products.toggle-active');
 
     Route::resource('orders', AdminOrderController::class)->only(['index', 'show', 'update']);
+    Route::post('/orders/{order}/cancel', [AdminOrderController::class, 'cancel'])->name('orders.cancel');
+    Route::post('/orders/{order}/refund', [AdminOrderController::class, 'markRefunded'])->name('orders.refund');
     Route::post('/orders/{order}/assign-courier', [AdminOrderController::class, 'assignCourier'])->name('orders.assign-courier');
     Route::post('/orders/{order}/mark-paid', [AdminOrderController::class, 'markPaid'])->name('orders.mark-paid');
     Route::get('/payments', [PaymentVerificationController::class, 'index'])->name('payments.index');
